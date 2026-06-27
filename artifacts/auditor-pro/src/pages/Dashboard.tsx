@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
-import { Link } from "wouter";
-import { ArrowLeft, Save, Minus, Plus, Search } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Link, useParams } from "wouter";
+import { ArrowLeft, Save, Minus, Plus, Search, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,13 +14,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useInventory, InventoryItem, ItemStatus } from "@/context/InventoryContext";
+import { useGetInventory, useUpdateInventoryItem, getGetInventoryQueryKey } from "@workspace/api-client-react";
+import type { InventoryItem } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+
+type ItemStatus = "Pendiente" | "Cuadrado" | "Sobrante" | "Faltante";
 
 const getItemStatus = (item: InventoryItem): ItemStatus => {
-  if (item.physical === 0) return "Pendiente";
-  if (item.physical === item.theoretical) return "Cuadrado";
-  if (item.physical > item.theoretical) return "Sobrante";
+  if (item.cantidadFisica === 0) return "Pendiente";
+  if (item.cantidadFisica === item.cantidadTeorica) return "Cuadrado";
+  if (item.cantidadFisica > item.cantidadTeorica) return "Sobrante";
   return "Faltante";
 };
 
@@ -32,43 +36,132 @@ const StatusBadge = ({ status }: { status: ItemStatus }) => {
       return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">Sobrante</Badge>;
     case "Faltante":
       return <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100 border-rose-200">Faltante</Badge>;
-    case "Pendiente":
     default:
       return <Badge variant="outline" className="text-slate-500 bg-slate-50">Pendiente</Badge>;
   }
 };
 
 export default function Dashboard() {
-  const { items, updatePhysicalCount, activeInventoryName } = useInventory();
+  const params = useParams<{ id: string }>();
+  const inventoryId = parseInt(params.id ?? "", 10);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: inventory, isLoading, isError } = useGetInventory(inventoryId, {
+    query: { enabled: !isNaN(inventoryId), queryKey: getGetInventoryQueryKey(inventoryId) },
+  });
+
+  const updateItem = useUpdateInventoryItem();
+
+  // Local items state for instant UI feedback
+  const [localItems, setLocalItems] = useState<InventoryItem[]>([]);
+
+  useEffect(() => {
+    if (inventory?.items) {
+      setLocalItems(inventory.items);
+    }
+  }, [inventory?.items]);
+
   const [search, setSearch] = useState("");
+  const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
 
   const filteredItems = useMemo(() => {
-    if (!search) return items;
+    if (!search) return localItems;
     const lower = search.toLowerCase();
-    return items.filter(
+    return localItems.filter(
       (item) =>
         item.sku.toLowerCase().includes(lower) ||
-        item.description.toLowerCase().includes(lower)
+        item.descripcion.toLowerCase().includes(lower)
     );
-  }, [items, search]);
+  }, [localItems, search]);
 
   const pendientes = filteredItems.filter((i) => getItemStatus(i) === "Pendiente");
   const cuadrados = filteredItems.filter((i) => getItemStatus(i) === "Cuadrado");
   const sobrantes = filteredItems.filter((i) => getItemStatus(i) === "Sobrante");
   const faltantes = filteredItems.filter((i) => getItemStatus(i) === "Faltante");
 
-  const totalItems = items.length;
-  const totalCuadrados = items.filter((i) => getItemStatus(i) === "Cuadrado").length;
-  const totalSobrantes = items.filter((i) => getItemStatus(i) === "Sobrante").length;
-  const totalFaltantes = items.filter((i) => getItemStatus(i) === "Faltante").length;
+  const totalCuadrados = localItems.filter((i) => getItemStatus(i) === "Cuadrado").length;
+  const totalSobrantes = localItems.filter((i) => getItemStatus(i) === "Sobrante").length;
+  const totalFaltantes = localItems.filter((i) => getItemStatus(i) === "Faltante").length;
+
+  const handleUpdateCount = (item: InventoryItem, delta: number) => {
+    const newCount = Math.max(0, item.cantidadFisica + delta);
+
+    // Optimistic UI update
+    setLocalItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, cantidadFisica: newCount } : i))
+    );
+
+    setSavingIds((prev) => new Set(prev).add(item.id));
+
+    updateItem.mutate(
+      { inventoryId, itemId: item.id, data: { cantidadFisica: newCount } },
+      {
+        onSuccess: () => {
+          setSavingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        },
+        onError: () => {
+          // Revert optimistic update on error
+          setLocalItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, cantidadFisica: item.cantidadFisica } : i))
+          );
+          setSavingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+          toast({ title: "Error al guardar", description: "No se pudo actualizar el conteo.", variant: "destructive" });
+        },
+      }
+    );
+  };
 
   const handleSave = () => {
+    queryClient.invalidateQueries({ queryKey: getGetInventoryQueryKey(inventoryId) });
     toast({
       title: "Progreso guardado",
       description: "Los datos del inventario se han guardado correctamente.",
     });
   };
+
+  const today = new Intl.DateTimeFormat("es-ES", { dateStyle: "long" }).format(new Date());
+
+  if (isNaN(inventoryId)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-slate-500">ID de inventario inválido.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto mb-4" />
+          <p className="text-slate-500">Cargando inventario...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !inventory) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-4" />
+          <p className="text-slate-700 font-semibold">No se encontró el inventario</p>
+          <Link href="/" className="mt-4 inline-block text-sm text-slate-500 underline">
+            Volver al inicio
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const renderTable = (data: InventoryItem[]) => (
     <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
@@ -92,32 +185,37 @@ export default function Dashboard() {
             </TableRow>
           ) : (
             data.map((item) => (
-              <TableRow key={item.sku} data-testid={`row-item-${item.sku}`}>
+              <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
                 <TableCell className="font-medium font-mono text-xs">{item.sku}</TableCell>
-                <TableCell className="text-slate-700 font-medium">{item.description}</TableCell>
-                <TableCell className="text-slate-500">{item.category}</TableCell>
-                <TableCell className="text-right text-slate-500 font-mono">{item.theoretical}</TableCell>
+                <TableCell className="text-slate-700 font-medium">{item.descripcion}</TableCell>
+                <TableCell className="text-slate-500">{item.categoria}</TableCell>
+                <TableCell className="text-right text-slate-500 font-mono">{item.cantidadTeorica}</TableCell>
                 <TableCell>
                   <div className="flex items-center justify-center space-x-2">
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
+                    <Button
+                      variant="outline"
+                      size="icon"
                       className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                      onClick={() => updatePhysicalCount(item.sku, item.physical - 1)}
-                      disabled={item.physical === 0}
-                      data-testid={`btn-minus-${item.sku}`}
+                      onClick={() => handleUpdateCount(item, -1)}
+                      disabled={item.cantidadFisica === 0 || savingIds.has(item.id)}
+                      data-testid={`btn-minus-${item.id}`}
                     >
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900">
-                      {item.physical}
+                    <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900 relative">
+                      {savingIds.has(item.id) ? (
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
+                      ) : (
+                        item.cantidadFisica
+                      )}
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
+                    <Button
+                      variant="outline"
+                      size="icon"
                       className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                      onClick={() => updatePhysicalCount(item.sku, item.physical + 1)}
-                      data-testid={`btn-plus-${item.sku}`}
+                      onClick={() => handleUpdateCount(item, 1)}
+                      disabled={savingIds.has(item.id)}
+                      data-testid={`btn-plus-${item.id}`}
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -134,10 +232,6 @@ export default function Dashboard() {
     </div>
   );
 
-  const today = new Intl.DateTimeFormat('es-ES', { 
-    dateStyle: 'long'
-  }).format(new Date());
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       {/* Header */}
@@ -147,15 +241,23 @@ export default function Dashboard() {
             <Link href="/" className="p-2 hover:bg-slate-800 rounded-md transition-colors" data-testid="link-back">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="h-6 w-px bg-slate-700 hidden sm:block"></div>
+            <div className="h-6 w-px bg-slate-700 hidden sm:block" />
             <div>
               <h1 className="text-lg font-bold leading-none tracking-tight">Auditor Pro</h1>
-              <p className="text-xs text-slate-400 font-medium">{activeInventoryName}</p>
+              <p className="text-xs text-slate-400 font-medium">
+                {inventory.name} — {inventory.location}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-slate-300 hidden md:inline-block">{today}</span>
-            <Button size="sm" variant="secondary" onClick={handleSave} className="font-semibold" data-testid="btn-save">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleSave}
+              className="font-semibold"
+              data-testid="btn-save"
+            >
               <Save className="w-4 h-4 mr-2" />
               Guardar
             </Button>
@@ -172,7 +274,7 @@ export default function Dashboard() {
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ítems</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-slate-900">{totalItems}</div>
+              <div className="text-3xl font-bold text-slate-900">{localItems.length}</div>
             </CardContent>
           </Card>
           <Card className="border-slate-200 shadow-sm border-b-4 border-b-emerald-400" data-testid="card-summary-cuadrados">
@@ -233,7 +335,7 @@ export default function Dashboard() {
                 Faltantes <Badge variant="secondary" className="ml-2 bg-rose-100 text-rose-700">{faltantes.length}</Badge>
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="pendientes" className="m-0 focus-visible:outline-none">
               {renderTable(pendientes)}
             </TabsContent>

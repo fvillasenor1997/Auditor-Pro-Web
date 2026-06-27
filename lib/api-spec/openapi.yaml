@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: inventories
+    description: Inventory operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /inventories:
+    get:
+      operationId: listInventories
+      tags: [inventories]
+      summary: List all inventories
+      responses:
+        "200":
+          description: List of inventories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Inventory"
+
+  /inventories/upload:
+    post:
+      operationId: uploadInventory
+      tags: [inventories]
+      summary: Upload an Excel file to create a new inventory
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/InventoryUpload"
+      responses:
+        "201":
+          description: Inventory created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryWithItems"
+        "400":
+          description: Bad request
+
+  /inventories/{inventoryId}:
+    get:
+      operationId: getInventory
+      tags: [inventories]
+      summary: Get inventory with all its items
+      parameters:
+        - name: inventoryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inventory with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryWithItems"
+        "404":
+          description: Not found
+
+  /inventories/{inventoryId}/items/{itemId}:
+    patch:
+      operationId: updateInventoryItem
+      tags: [inventories]
+      summary: Update the physical count of an inventory item
+      parameters:
+        - name: inventoryId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemUpdate"
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -33,4 +125,76 @@ components:
           type: string
       required:
         - status
+
+    Inventory:
+      type: object
+      required: [id, name, location, date, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        location:
+          type: string
+        date:
+          type: string
+        createdAt:
+          type: string
+
+    InventoryItem:
+      type: object
+      required: [id, inventoryId, sku, descripcion, categoria, cantidadTeorica, cantidadFisica]
+      properties:
+        id:
+          type: integer
+        inventoryId:
+          type: integer
+        sku:
+          type: string
+        descripcion:
+          type: string
+        categoria:
+          type: string
+        cantidadTeorica:
+          type: integer
+        cantidadFisica:
+          type: integer
+
+    InventoryWithItems:
+      type: object
+      required: [id, name, location, date, createdAt, items]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        location:
+          type: string
+        date:
+          type: string
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InventoryItem"
+
+    InventoryUpload:
+      type: object
+      required: [name, location, date]
+      properties:
+        name:
+          type: string
+        location:
+          type: string
+        date:
+          type: string
+
+    ItemUpdate:
+      type: object
+      required: [cantidadFisica]
+      properties:
+        cantidadFisica:
+          type: integer
+          minimum: 0
 
