@@ -427,7 +427,7 @@ export default function Home() {
                         e.stopPropagation();
                         setDeleteTarget(inv as InventoryRow);
                       }}
-                      className="ml-3 p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                      className="ml-3 p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors shrink-0"
                       title="Eliminar inventario"
                       data-testid={`btn-delete-inv-${inv.id}`}
                     >
