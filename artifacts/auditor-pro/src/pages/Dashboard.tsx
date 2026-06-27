@@ -22,6 +22,8 @@ import {
   ChevronDown,
   ChevronUp,
   LayoutDashboard,
+  FileText,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +44,7 @@ import { usePWAStatus } from "@/hooks/usePWAStatus";
 import type { CachedItem } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders } from "@/lib/auth";
+import { generateInventoryPDF, generateInventoryExcel } from "@/lib/reports";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -520,6 +523,9 @@ export default function Dashboard() {
   const [showLocations, setShowLocations] = useState(false);
   // ── Cards visibility toggle ──
   const [cardsVisible, setCardsVisible] = useState(true);
+  // ── Report loading states ──
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
 
   const filteredItems = useMemo(() => {
     if (!search) return items;
@@ -566,6 +572,41 @@ export default function Dashboard() {
         next.delete(item.id);
         return next;
       });
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (items.length === 0) {
+      toast({ title: "Sin datos", description: "No hay artículos para generar el reporte.", variant: "destructive" });
+      return;
+    }
+    const invName = inventory?.name ?? `Inventario #${inventoryId}`;
+    const invLocation = inventory?.location ?? "";
+    const invDate = inventory?.date ?? "";
+    setPdfLoading(true);
+    try {
+      await generateInventoryPDF(items, invName, invLocation, invDate);
+    } catch {
+      toast({ title: "Error al generar PDF", description: "Intente nuevamente.", variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (items.length === 0) {
+      toast({ title: "Sin datos", description: "No hay artículos para exportar.", variant: "destructive" });
+      return;
+    }
+    const invName = inventory?.name ?? `Inventario #${inventoryId}`;
+    const invDate = inventory?.date ?? "";
+    setExcelLoading(true);
+    try {
+      await generateInventoryExcel(items, invName, invDate);
+    } catch {
+      toast({ title: "Error al exportar Excel", description: "Intente nuevamente.", variant: "destructive" });
+    } finally {
+      setExcelLoading(false);
     }
   };
 
@@ -894,8 +935,42 @@ export default function Dashboard() {
 
         {/* ── Tabs & Table ─────────────────────────────────────────────── */}
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-            <h2 className="text-base sm:text-xl font-bold text-slate-900">Listado de Artículos</h2>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base sm:text-xl font-bold text-slate-900">Listado de Artículos</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportPDF}
+                  disabled={pdfLoading || items.length === 0}
+                  className="text-rose-700 border-rose-200 hover:bg-rose-50 hover:border-rose-300 h-8 text-xs"
+                  data-testid="btn-export-pdf"
+                >
+                  {pdfLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Reporte PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportExcel}
+                  disabled={excelLoading || items.length === 0}
+                  className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 h-8 text-xs"
+                  data-testid="btn-export-excel"
+                >
+                  {excelLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Exportar Excel
+                </Button>
+              </div>
+            </div>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
               <Input

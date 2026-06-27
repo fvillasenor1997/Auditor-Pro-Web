@@ -386,6 +386,56 @@ router.delete(
   }
 );
 
+// ─── DELETE /inventories/:inventoryId — cascade delete (admin only) ──────────
+
+router.delete(
+  "/inventories/:inventoryId",
+  requireAuth,
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const rawInvId = Array.isArray(req.params.inventoryId)
+      ? req.params.inventoryId[0]
+      : req.params.inventoryId;
+    const inventoryId = parseInt(rawInvId ?? "", 10);
+
+    if (isNaN(inventoryId)) {
+      res.status(400).json({ error: "Invalid inventoryId" });
+      return;
+    }
+
+    // Verify exists first
+    const [existing] = await db
+      .select({ id: inventoriesTable.id })
+      .from(inventoriesTable)
+      .where(eq(inventoriesTable.id, inventoryId));
+
+    if (!existing) {
+      res.status(404).json({ error: "Inventory not found" });
+      return;
+    }
+
+    // Cascade: count_records → inventory_items → locations → inventory
+    await db
+      .delete(countRecordsTable)
+      .where(eq(countRecordsTable.inventoryId, inventoryId));
+
+    await db
+      .delete(inventoryItemsTable)
+      .where(eq(inventoryItemsTable.inventoryId, inventoryId));
+
+    await db
+      .delete(locationsTable)
+      .where(eq(locationsTable.inventoryId, inventoryId));
+
+    await db
+      .delete(inventoriesTable)
+      .where(eq(inventoriesTable.id, inventoryId));
+
+    req.log.info({ inventoryId }, "Inventory deleted with full cascade");
+    res.json({ ok: true });
+  }
+);
+
 // ─── Locations ───────────────────────────────────────────────────────────────
 
 // GET /inventories/:inventoryId/locations — list locations (all authenticated users)

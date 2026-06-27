@@ -67,7 +67,7 @@ if (!self.define) {
     });
   };
 }
-define(['./workbox-30790fc3'], (function (workbox) { 'use strict';
+define(['./workbox-290dd570'], (function (workbox) { 'use strict';
 
   self.skipWaiting();
   workbox.clientsClaim();
@@ -79,8 +79,15 @@ define(['./workbox-30790fc3'], (function (workbox) { 'use strict';
   workbox.precacheAndRoute([{
     "url": "registerSW.js",
     "revision": "3ca0b8505b4bec776b69afdba2768812"
+  }, {
+    "url": "index.html",
+    "revision": "0.v1kq67roq4c"
   }], {});
   workbox.cleanupOutdatedCaches();
+  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
+    allowlist: [/^\/$/],
+    denylist: [/^\/api\//]
+  }));
   workbox.registerRoute(/^.*\/api\/inventories.*/, new workbox.NetworkFirst({
     "cacheName": "api-inventories",
     "networkTimeoutSeconds": 5,
