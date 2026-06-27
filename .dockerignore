@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+**/dist
+**/.tsbuildinfo
+artifacts/auditor-pro/dev-dist
+.git
+.local
+.cache
+attached_assets
+*.log
