@@ -76,6 +76,7 @@ router.post(
       descripcion: string;
       categoria: string;
       cantidadTeorica: number;
+      precio: string;
     }> = [];
 
     if (req.file) {
@@ -91,6 +92,7 @@ router.post(
           descripcion: String(row["Descripcion"] ?? row["descripcion"] ?? row["Descripción"] ?? row["descripción"] ?? ""),
           categoria: String(row["Categoria"] ?? row["categoria"] ?? row["Categoría"] ?? row["categoría"] ?? ""),
           cantidadTeorica: Number(row["Teorico"] ?? row["teorico"] ?? row["Teórico"] ?? row["teórico"] ?? row["CantidadTeorica"] ?? row["cantidad_teorica"] ?? 0),
+          precio: String(Number(row["Precio"] ?? row["precio"] ?? row["Price"] ?? row["price"] ?? 0).toFixed(2)),
         })).filter((item) => item.sku);
 
         fs.unlinkSync(req.file.path);

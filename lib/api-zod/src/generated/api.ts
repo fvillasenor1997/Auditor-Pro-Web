@@ -52,7 +52,8 @@ export const UploadInventoryResponse = zod.object({
   "descripcion": zod.string(),
   "categoria": zod.string(),
   "cantidadTeorica": zod.number(),
-  "cantidadFisica": zod.number()
+  "cantidadFisica": zod.number(),
+  "precio": zod.string().describe('Unit price (decimal string from DB)')
 }))
 })
 
@@ -77,7 +78,8 @@ export const GetInventoryResponse = zod.object({
   "descripcion": zod.string(),
   "categoria": zod.string(),
   "cantidadTeorica": zod.number(),
-  "cantidadFisica": zod.number()
+  "cantidadFisica": zod.number(),
+  "precio": zod.string().describe('Unit price (decimal string from DB)')
 }))
 })
 
@@ -105,7 +107,8 @@ export const UpdateInventoryItemResponse = zod.object({
   "descripcion": zod.string(),
   "categoria": zod.string(),
   "cantidadTeorica": zod.number(),
-  "cantidadFisica": zod.number()
+  "cantidadFisica": zod.number(),
+  "precio": zod.string().describe('Unit price (decimal string from DB)')
 })
 
 

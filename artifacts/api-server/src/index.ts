@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { db, usersTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
+import { seedDemoData } from "./seed";
 
 const rawPort = process.env["PORT"];
 
@@ -39,7 +40,9 @@ async function seedAdminUser(): Promise<void> {
   }
 }
 
-seedAdminUser().then(() => {
+seedAdminUser()
+  .then(() => seedDemoData(logger))
+  .then(() => {
   app.listen(port, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");

@@ -25,6 +25,8 @@ export interface InventoryItem {
   categoria: string;
   cantidadTeorica: number;
   cantidadFisica: number;
+  /** Unit price (decimal string from DB) */
+  precio: string;
 }
 
 export interface InventoryWithItems {

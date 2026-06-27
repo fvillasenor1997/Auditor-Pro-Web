@@ -333,6 +333,20 @@ export default function Dashboard() {
   const totalSobrantes = items.filter((i) => getItemStatus(i) === "Sobrante").length;
   const totalFaltantes = items.filter((i) => getItemStatus(i) === "Faltante").length;
 
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
+
+  const valorTotal = items.reduce((s, i) => s + Number(i.precio ?? 0) * i.cantidadTeorica, 0);
+  const valorCuadrados = items
+    .filter((i) => getItemStatus(i) === "Cuadrado")
+    .reduce((s, i) => s + Number(i.precio ?? 0) * i.cantidadFisica, 0);
+  const valorSobrantes = items
+    .filter((i) => getItemStatus(i) === "Sobrante")
+    .reduce((s, i) => s + Number(i.precio ?? 0) * (i.cantidadFisica - i.cantidadTeorica), 0);
+  const valorFaltantes = items
+    .filter((i) => getItemStatus(i) === "Faltante")
+    .reduce((s, i) => s + Number(i.precio ?? 0) * (i.cantidadTeorica - i.cantidadFisica), 0);
+
   const handleUpdateCount = async (item: CachedItem, delta: number) => {
     setUpdatingIds((prev) => new Set(prev).add(item.id));
     try {
@@ -367,17 +381,18 @@ export default function Dashboard() {
             <TableRow className="hover:bg-slate-50">
               <TableHead className="w-[120px] font-semibold text-slate-900">SKU</TableHead>
               <TableHead className="font-semibold text-slate-900">Descripción</TableHead>
-              <TableHead className="w-[150px] font-semibold text-slate-900">Categoría</TableHead>
-              <TableHead className="w-[100px] text-right font-semibold text-slate-900">Teórico</TableHead>
+              <TableHead className="w-[130px] font-semibold text-slate-900">Categoría</TableHead>
+              <TableHead className="w-[90px] text-right font-semibold text-slate-900">Precio</TableHead>
+              <TableHead className="w-[90px] text-right font-semibold text-slate-900">Teórico</TableHead>
               <TableHead className="w-[180px] text-center font-semibold text-slate-900">Físico</TableHead>
-              <TableHead className="w-[120px] text-center font-semibold text-slate-900">Estado</TableHead>
+              <TableHead className="w-[110px] text-center font-semibold text-slate-900">Estado</TableHead>
               <TableHead className="w-[60px] text-center font-semibold text-slate-900">Ver</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-slate-500">
+                <TableCell colSpan={8} className="h-32 text-center text-slate-500">
                   No hay registros en esta vista.
                 </TableCell>
               </TableRow>
@@ -386,7 +401,10 @@ export default function Dashboard() {
                 <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
                   <TableCell className="font-medium font-mono text-xs">{item.sku}</TableCell>
                   <TableCell className="text-slate-700 font-medium">{item.descripcion}</TableCell>
-                  <TableCell className="text-slate-500">{item.categoria}</TableCell>
+                  <TableCell className="text-slate-500 text-sm">{item.categoria}</TableCell>
+                  <TableCell className="text-right text-slate-600 font-mono text-sm">
+                    {Number(item.precio ?? 0) > 0 ? `$${Number(item.precio).toFixed(2)}` : "—"}
+                  </TableCell>
                   <TableCell className="text-right text-slate-500 font-mono">{item.cantidadTeorica}</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center space-x-2">
@@ -566,35 +584,39 @@ export default function Dashboard() {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="border-slate-200 shadow-sm" data-testid="card-summary-total">
-            <CardHeader className="pb-2 pt-4 px-4">
+            <CardHeader className="pb-1 pt-4 px-4">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ítems</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="text-3xl font-bold text-slate-900">{items.length}</div>
+              <div className="text-xs text-slate-400 mt-1 font-medium">{fmt(valorTotal)}</div>
             </CardContent>
           </Card>
           <Card className="border-slate-200 shadow-sm border-b-4 border-b-emerald-400" data-testid="card-summary-cuadrados">
-            <CardHeader className="pb-2 pt-4 px-4">
+            <CardHeader className="pb-1 pt-4 px-4">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cuadrados</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="text-3xl font-bold text-slate-900">{totalCuadrados}</div>
+              <div className="text-xs text-emerald-600 mt-1 font-medium">{fmt(valorCuadrados)}</div>
             </CardContent>
           </Card>
           <Card className="border-slate-200 shadow-sm border-b-4 border-b-amber-400" data-testid="card-summary-sobrantes">
-            <CardHeader className="pb-2 pt-4 px-4">
+            <CardHeader className="pb-1 pt-4 px-4">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sobrantes</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="text-3xl font-bold text-slate-900">{totalSobrantes}</div>
+              <div className="text-xs text-amber-600 mt-1 font-medium">+{fmt(valorSobrantes)}</div>
             </CardContent>
           </Card>
           <Card className="border-slate-200 shadow-sm border-b-4 border-b-rose-400" data-testid="card-summary-faltantes">
-            <CardHeader className="pb-2 pt-4 px-4">
+            <CardHeader className="pb-1 pt-4 px-4">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faltantes</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="text-3xl font-bold text-slate-900">{totalFaltantes}</div>
+              <div className="text-xs text-rose-600 mt-1 font-medium">-{fmt(valorFaltantes)}</div>
             </CardContent>
           </Card>
         </div>
