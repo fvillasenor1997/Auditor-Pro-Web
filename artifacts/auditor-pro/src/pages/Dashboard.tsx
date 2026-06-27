@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, Save, Minus, Plus, Search, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useGetInventory, useUpdateInventoryItem, getGetInventoryQueryKey } from "@workspace/api-client-react";
-import type { InventoryItem } from "@workspace/api-client-react";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { useInventorySync } from "@/hooks/useInventorySync";
+import type { CachedItem } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
 
 type ItemStatus = "Pendiente" | "Cuadrado" | "Sobrante" | "Faltante";
 
-const getItemStatus = (item: InventoryItem): ItemStatus => {
+const getItemStatus = (item: CachedItem): ItemStatus => {
   if (item.cantidadFisica === 0) return "Pendiente";
   if (item.cantidadFisica === item.cantidadTeorica) return "Cuadrado";
   if (item.cantidadFisica > item.cantidadTeorica) return "Sobrante";
@@ -45,87 +45,54 @@ export default function Dashboard() {
   const params = useParams<{ id: string }>();
   const inventoryId = parseInt(params.id ?? "", 10);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const { data: inventory, isLoading, isError } = useGetInventory(inventoryId, {
-    query: { enabled: !isNaN(inventoryId), queryKey: getGetInventoryQueryKey(inventoryId) },
-  });
-
-  const updateItem = useUpdateInventoryItem();
-
-  // Local items state for instant UI feedback
-  const [localItems, setLocalItems] = useState<InventoryItem[]>([]);
-
-  useEffect(() => {
-    if (inventory?.items) {
-      setLocalItems(inventory.items);
-    }
-  }, [inventory?.items]);
+  const { items, inventory, status, pendingCount, updateCount, forceSync } =
+    useInventorySync(inventoryId);
 
   const [search, setSearch] = useState("");
-  const [savingIds, setSavingIds] = useState<Set<number>>(new Set());
+  const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
 
   const filteredItems = useMemo(() => {
-    if (!search) return localItems;
+    if (!search) return items;
     const lower = search.toLowerCase();
-    return localItems.filter(
+    return items.filter(
       (item) =>
         item.sku.toLowerCase().includes(lower) ||
         item.descripcion.toLowerCase().includes(lower)
     );
-  }, [localItems, search]);
+  }, [items, search]);
 
   const pendientes = filteredItems.filter((i) => getItemStatus(i) === "Pendiente");
   const cuadrados = filteredItems.filter((i) => getItemStatus(i) === "Cuadrado");
   const sobrantes = filteredItems.filter((i) => getItemStatus(i) === "Sobrante");
   const faltantes = filteredItems.filter((i) => getItemStatus(i) === "Faltante");
 
-  const totalCuadrados = localItems.filter((i) => getItemStatus(i) === "Cuadrado").length;
-  const totalSobrantes = localItems.filter((i) => getItemStatus(i) === "Sobrante").length;
-  const totalFaltantes = localItems.filter((i) => getItemStatus(i) === "Faltante").length;
+  const totalCuadrados = items.filter((i) => getItemStatus(i) === "Cuadrado").length;
+  const totalSobrantes = items.filter((i) => getItemStatus(i) === "Sobrante").length;
+  const totalFaltantes = items.filter((i) => getItemStatus(i) === "Faltante").length;
 
-  const handleUpdateCount = (item: InventoryItem, delta: number) => {
-    const newCount = Math.max(0, item.cantidadFisica + delta);
-
-    // Optimistic UI update
-    setLocalItems((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, cantidadFisica: newCount } : i))
-    );
-
-    setSavingIds((prev) => new Set(prev).add(item.id));
-
-    updateItem.mutate(
-      { inventoryId, itemId: item.id, data: { cantidadFisica: newCount } },
-      {
-        onSuccess: () => {
-          setSavingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(item.id);
-            return next;
-          });
-        },
-        onError: () => {
-          // Revert optimistic update on error
-          setLocalItems((prev) =>
-            prev.map((i) => (i.id === item.id ? { ...i, cantidadFisica: item.cantidadFisica } : i))
-          );
-          setSavingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(item.id);
-            return next;
-          });
-          toast({ title: "Error al guardar", description: "No se pudo actualizar el conteo.", variant: "destructive" });
-        },
-      }
-    );
+  const handleUpdateCount = async (item: CachedItem, delta: number) => {
+    setUpdatingIds((prev) => new Set(prev).add(item.id));
+    try {
+      await updateCount(item, delta);
+    } finally {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+    }
   };
 
-  const handleSave = () => {
-    queryClient.invalidateQueries({ queryKey: getGetInventoryQueryKey(inventoryId) });
-    toast({
-      title: "Progreso guardado",
-      description: "Los datos del inventario se han guardado correctamente.",
-    });
+  const handleSave = async () => {
+    if (pendingCount > 0 && navigator.onLine) {
+      await forceSync();
+      toast({ title: "Sincronizado", description: "Todos los cambios han sido enviados al servidor." });
+    } else if (pendingCount > 0) {
+      toast({ title: "Sin conexión", description: `${pendingCount} cambios guardados localmente. Se sincronizarán al recuperar la conexión.`, variant: "destructive" });
+    } else {
+      toast({ title: "Todo guardado", description: "No hay cambios pendientes." });
+    }
   };
 
   const today = new Intl.DateTimeFormat("es-ES", { dateStyle: "long" }).format(new Date());
@@ -138,7 +105,7 @@ export default function Dashboard() {
     );
   }
 
-  if (isLoading) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -149,12 +116,13 @@ export default function Dashboard() {
     );
   }
 
-  if (isError || !inventory) {
+  if (status === "error" && items.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-4" />
           <p className="text-slate-700 font-semibold">No se encontró el inventario</p>
+          <p className="text-slate-500 text-sm mt-1">Verifique su conexión o el ID del inventario.</p>
           <Link href="/" className="mt-4 inline-block text-sm text-slate-500 underline">
             Volver al inicio
           </Link>
@@ -163,7 +131,10 @@ export default function Dashboard() {
     );
   }
 
-  const renderTable = (data: InventoryItem[]) => (
+  const inventoryName = inventory?.name ?? `Inventario #${inventoryId}`;
+  const inventoryLocation = inventory?.location ?? "";
+
+  const renderTable = (data: CachedItem[]) => (
     <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
       <Table>
         <TableHeader className="bg-slate-50">
@@ -197,13 +168,13 @@ export default function Dashboard() {
                       size="icon"
                       className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                       onClick={() => handleUpdateCount(item, -1)}
-                      disabled={item.cantidadFisica === 0 || savingIds.has(item.id)}
+                      disabled={item.cantidadFisica === 0 || updatingIds.has(item.id)}
                       data-testid={`btn-minus-${item.id}`}
                     >
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900 relative">
-                      {savingIds.has(item.id) ? (
+                    <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900">
+                      {updatingIds.has(item.id) ? (
                         <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
                       ) : (
                         item.cantidadFisica
@@ -214,7 +185,7 @@ export default function Dashboard() {
                       size="icon"
                       className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                       onClick={() => handleUpdateCount(item, 1)}
-                      disabled={savingIds.has(item.id)}
+                      disabled={updatingIds.has(item.id)}
                       data-testid={`btn-plus-${item.id}`}
                     >
                       <Plus className="h-4 w-4" />
@@ -234,6 +205,13 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
+      {/* Offline warning banner */}
+      {status === "offline" && (
+        <div className="bg-amber-500 text-amber-950 px-4 py-2 text-center text-sm font-semibold" data-testid="banner-offline">
+          Modo sin conexión — Los cambios se guardan localmente y se sincronizarán cuando vuelva la conexión.
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-slate-900 text-white sticky top-0 z-10 shadow-md">
         <div className="px-6 h-16 flex items-center justify-between">
@@ -245,11 +223,12 @@ export default function Dashboard() {
             <div>
               <h1 className="text-lg font-bold leading-none tracking-tight">Auditor Pro</h1>
               <p className="text-xs text-slate-400 font-medium">
-                {inventory.name} — {inventory.location}
+                {inventoryName}{inventoryLocation ? ` — ${inventoryLocation}` : ""}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <OfflineIndicator status={status} pendingCount={pendingCount} onSync={forceSync} />
             <span className="text-sm font-medium text-slate-300 hidden md:inline-block">{today}</span>
             <Button
               size="sm"
@@ -259,7 +238,7 @@ export default function Dashboard() {
               data-testid="btn-save"
             >
               <Save className="w-4 h-4 mr-2" />
-              Guardar
+              {pendingCount > 0 ? `Guardar (${pendingCount})` : "Guardar"}
             </Button>
           </div>
         </div>
@@ -274,7 +253,7 @@ export default function Dashboard() {
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ítems</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-slate-900">{localItems.length}</div>
+              <div className="text-3xl font-bold text-slate-900">{items.length}</div>
             </CardContent>
           </Card>
           <Card className="border-slate-200 shadow-sm border-b-4 border-b-emerald-400" data-testid="card-summary-cuadrados">

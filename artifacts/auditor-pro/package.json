@@ -73,5 +73,10 @@
     "vite": "catalog:",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "dexie": "^4.4.4",
+    "vite-plugin-pwa": "^1.3.0",
+    "workbox-window": "^7.4.1"
   }
 }
