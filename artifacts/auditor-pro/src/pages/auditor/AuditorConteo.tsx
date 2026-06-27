@@ -16,14 +16,20 @@ import {
   User,
   MapPin,
   Lock,
+  ChevronDown,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { useInventorySync } from "@/hooks/useInventorySync";
+import { usePWAStatus } from "@/hooks/usePWAStatus";
 import { playBeep, playErrorBeep, vibrate } from "@/lib/audio";
 import { useAuth } from "@/contexts/AuthContext";
 import { syncCountRecord } from "@/lib/sync";
+import { authHeaders } from "@/lib/auth";
 import type { CachedItem } from "@/lib/db";
+
+const BASE = import.meta.env.BASE_URL;
 
 interface ScannedEntry {
   id: string;
@@ -36,14 +42,34 @@ interface ScannedEntry {
   timestamp: number;
 }
 
+interface LocationRow {
+  id: number;
+  inventoryId: number;
+  name: string;
+}
+
 const QUICK_AMOUNTS = [1, 5, 10, 25];
 
 export default function AuditorConteo() {
   const params = useParams<{ id: string }>();
   const inventoryId = parseInt(params.id ?? "", 10);
   const { user } = useAuth();
+  const pwaStatus = usePWAStatus();
 
   const { items, status, updateCount } = useInventorySync(inventoryId);
+
+  // Locations from backend
+  const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [locationsLoading, setLocationsLoading] = useState(true);
+
+  useEffect(() => {
+    if (isNaN(inventoryId)) return;
+    fetch(`${BASE}api/inventories/${inventoryId}/locations`, { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: LocationRow[]) => setLocations(data))
+      .catch(() => setLocations([]))
+      .finally(() => setLocationsLoading(false));
+  }, [inventoryId]);
 
   const [location, setLocation] = useState("");
   const [locationLocked, setLocationLocked] = useState(false);
@@ -55,9 +81,9 @@ export default function AuditorConteo() {
   const [cameraOpen, setCameraOpen] = useState(false);
 
   const textInputRef = useRef<HTMLInputElement>(null);
-  const locationInputRef = useRef<HTMLInputElement>(null);
 
   const isLocationReady = locationLocked && location.trim().length > 0;
+  const hasLocations = locations.length > 0;
 
   useEffect(() => {
     const refocus = () => {
@@ -103,10 +129,8 @@ export default function AuditorConteo() {
       playBeep();
       vibrate(80);
 
-      // Update the aggregate count (cantidadFisica)
       await updateCount(item, amount);
 
-      // Create individual count record
       if (user) {
         const result = await syncCountRecord({
           inventoryId,
@@ -187,6 +211,13 @@ export default function AuditorConteo() {
     }
   };
 
+  const confirmLocation = () => {
+    if (location.trim()) {
+      setLocationLocked(true);
+      setTimeout(() => textInputRef.current?.focus(), 50);
+    }
+  };
+
   const numpadKeys = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", "backspace", "clear"];
   const isOnline = status === "online" || status === "syncing";
 
@@ -213,7 +244,18 @@ export default function AuditorConteo() {
             <User className="w-3 h-3" /> @{user?.username}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* SW status indicator */}
+          {pwaStatus === "installing" && (
+            <span className="flex items-center gap-1 text-xs text-amber-400 font-medium" title="Descargando para uso offline">
+              <Download className="w-3.5 h-3.5 animate-bounce" />
+            </span>
+          )}
+          {pwaStatus === "ready" && (
+            <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium" title="Listo para trabajar sin conexión">
+              <Wifi className="w-3.5 h-3.5" />
+            </span>
+          )}
           {isOnline ? (
             <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
               <Wifi className="w-3.5 h-3.5" /> En línea
@@ -230,7 +272,7 @@ export default function AuditorConteo() {
       </header>
 
       <div className="flex-1 flex flex-col overflow-auto">
-        {/* Section 0: Location lock */}
+        {/* Section 0: Location selector */}
         <section className="shrink-0 bg-slate-900 border-b border-slate-700 px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
             <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
@@ -243,58 +285,112 @@ export default function AuditorConteo() {
               </span>
             )}
           </div>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                ref={locationInputRef}
-                type="text"
-                value={location}
-                onChange={(e) => {
-                  setLocation(e.target.value);
-                  if (locationLocked) setLocationLocked(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && location.trim()) {
-                    setLocationLocked(true);
-                    setTimeout(() => textInputRef.current?.focus(), 50);
-                  }
-                }}
-                placeholder="Ej: Pasillo A, Estante 3..."
-                disabled={locationLocked}
-                className="w-full bg-slate-800 border border-slate-700 disabled:border-emerald-700 disabled:bg-emerald-950/40 text-white text-sm pl-9 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600 transition-colors"
-                autoComplete="off"
-              />
+
+          {locationsLoading ? (
+            <div className="flex items-center gap-2 text-slate-500 py-1">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-xs">Cargando locaciones...</span>
             </div>
-            {!locationLocked ? (
-              <Button
-                size="sm"
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shrink-0 h-10"
-                onClick={() => {
-                  if (location.trim()) {
-                    setLocationLocked(true);
-                    setTimeout(() => textInputRef.current?.focus(), 50);
-                  }
-                }}
-                disabled={!location.trim()}
-              >
-                Confirmar
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-slate-600 text-slate-300 hover:bg-slate-800 shrink-0 h-10"
-                onClick={() => setLocationLocked(false)}
-              >
-                Cambiar
-              </Button>
-            )}
-          </div>
+          ) : hasLocations ? (
+            /* Combo dropdown from backend */
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none z-10" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none z-10" />
+                <select
+                  value={location}
+                  onChange={(e) => {
+                    setLocation(e.target.value);
+                    if (locationLocked) setLocationLocked(false);
+                  }}
+                  disabled={locationLocked}
+                  className="w-full bg-slate-800 border border-slate-700 disabled:border-emerald-700 disabled:bg-emerald-950/40 text-white text-sm pl-9 pr-9 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none transition-colors cursor-pointer disabled:cursor-default"
+                >
+                  <option value="" disabled className="text-slate-500 bg-slate-800">
+                    — Seleccione una locación —
+                  </option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.name} className="bg-slate-800 text-white">
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {!locationLocked ? (
+                <Button
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shrink-0 h-10"
+                  onClick={confirmLocation}
+                  disabled={!location.trim()}
+                >
+                  Confirmar
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-800 shrink-0 h-10"
+                  onClick={() => setLocationLocked(false)}
+                >
+                  Cambiar
+                </Button>
+              )}
+            </div>
+          ) : (
+            /* Fallback: free text input when no locations configured */
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => {
+                    setLocation(e.target.value);
+                    if (locationLocked) setLocationLocked(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && location.trim()) confirmLocation();
+                  }}
+                  placeholder="Ej: Pasillo A, Estante 3..."
+                  disabled={locationLocked}
+                  className="w-full bg-slate-800 border border-slate-700 disabled:border-emerald-700 disabled:bg-emerald-950/40 text-white text-sm pl-9 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600 transition-colors"
+                  autoComplete="off"
+                />
+              </div>
+              {!locationLocked ? (
+                <Button
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shrink-0 h-10"
+                  onClick={confirmLocation}
+                  disabled={!location.trim()}
+                >
+                  Confirmar
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-800 shrink-0 h-10"
+                  onClick={() => setLocationLocked(false)}
+                >
+                  Cambiar
+                </Button>
+              )}
+            </div>
+          )}
+
+          {!hasLocations && !locationsLoading && (
+            <p className="mt-1.5 text-xs text-slate-500 flex items-center gap-1">
+              El administrador puede crear locaciones desde el Dashboard.
+            </p>
+          )}
+
           {!isLocationReady && (
             <p className="mt-2 text-xs text-amber-400/80 flex items-center gap-1.5">
               <Lock className="w-3 h-3" />
-              Por favor, introduce la locación antes de empezar a contar
+              {hasLocations
+                ? "Selecciona y confirma una locación antes de contar"
+                : "Introduce la locación antes de empezar a contar"}
             </p>
           )}
         </section>

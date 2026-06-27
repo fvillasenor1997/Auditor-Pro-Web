@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useParams } from "wouter";
 import {
   ArrowLeft,
@@ -14,6 +14,11 @@ import {
   MapPin,
   Clock,
   X,
+  Trash2,
+  ArrowLeftRight,
+  Wifi,
+  WifiOff,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useInventorySync } from "@/hooks/useInventorySync";
+import { usePWAStatus } from "@/hooks/usePWAStatus";
 import type { CachedItem } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders } from "@/lib/auth";
@@ -72,6 +78,12 @@ interface Participant {
   totalRecords: number;
 }
 
+interface LocationRow {
+  id: number;
+  inventoryId: number;
+  name: string;
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("es-ES", {
@@ -81,6 +93,27 @@ function formatTime(iso: string | null): string {
     day: "2-digit",
     month: "short",
   }).format(new Date(iso));
+}
+
+// ─── SW Status Badge ─────────────────────────────────────────────────────────
+
+function SWBadge() {
+  const pwaStatus = usePWAStatus();
+  if (pwaStatus === "unsupported" || pwaStatus === "checking") return null;
+  if (pwaStatus === "installing") {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-amber-300 font-medium" title="Descargando para uso offline...">
+        <Download className="w-3.5 h-3.5 animate-bounce" />
+        <span className="hidden sm:inline">Descargando</span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium" title="Listo para trabajar sin conexión">
+      <Wifi className="w-3.5 h-3.5" />
+      <span className="hidden sm:inline">Offline listo</span>
+    </span>
+  );
 }
 
 // ─── History Modal ──────────────────────────────────────────────────────────────
@@ -299,6 +332,169 @@ function ParticipantsModal({
   );
 }
 
+// ─── Locations Modal ──────────────────────────────────────────────────────────
+
+function LocationsModal({
+  inventoryId,
+  onClose,
+}: {
+  inventoryId: number;
+  onClose: () => void;
+}) {
+  const [locations, setLocations] = useState<LocationRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch(`${BASE}api/inventories/${inventoryId}/locations`, { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: LocationRow[]) => setLocations(data))
+      .catch(() => setError("Error al cargar locaciones."))
+      .finally(() => setLoading(false));
+  }, [inventoryId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async () => {
+    if (!newName.trim() || saving) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`${BASE}api/inventories/${inventoryId}/locations`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      if (!r.ok) throw new Error();
+      setNewName("");
+      load();
+    } catch {
+      setError("No se pudo crear la locación.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (locId: number) => {
+    try {
+      await fetch(`${BASE}api/inventories/${inventoryId}/locations/${locId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      load();
+    } catch {
+      setError("No se pudo eliminar la locación.");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-slate-500" />
+            Locaciones
+          </h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-b border-slate-100">
+          <p className="text-xs text-slate-500 mb-3">Los auditores solo pueden elegir de esta lista al momento de contar.</p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Ej: Pasillo A - Estante 1"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+              className="flex-1"
+              maxLength={80}
+            />
+            <Button onClick={handleAdd} disabled={!newName.trim() || saving} size="sm" className="shrink-0">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Agregar"}
+            </Button>
+          </div>
+          {error && <p className="text-xs text-rose-500 mt-2">{error}</p>}
+        </div>
+
+        <div className="flex-1 overflow-auto px-6 py-3">
+          {loading && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+          )}
+          {!loading && locations !== null && locations.length === 0 && (
+            <p className="text-center text-slate-400 text-sm py-8">
+              No hay locaciones creadas aún.
+            </p>
+          )}
+          {!loading && locations !== null && locations.length > 0 && (
+            <div className="space-y-1">
+              {locations.map((loc) => (
+                <div key={loc.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors group">
+                  <span className="flex items-center gap-2 text-sm text-slate-700">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    {loc.name}
+                  </span>
+                  <button
+                    onClick={() => handleDelete(loc.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                    title="Eliminar locación"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+          <p className="text-xs text-slate-400">
+            {locations?.length ?? 0} locación{(locations?.length ?? 0) !== 1 ? "es" : ""} registrada{(locations?.length ?? 0) !== 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Swapped Codes Detection ──────────────────────────────────────────────────
+
+interface SwappedPair {
+  surplus: CachedItem;
+  deficit: CachedItem;
+  surplusQty: number;
+  deficitQty: number;
+  diff: number;
+}
+
+function detectSwappedCodes(items: CachedItem[]): SwappedPair[] {
+  const sobrantes = items.filter((i) => i.cantidadFisica > i.cantidadTeorica);
+  const faltantes = items.filter((i) => i.cantidadFisica < i.cantidadTeorica && i.cantidadFisica > 0);
+  const pairs: SwappedPair[] = [];
+  const used = new Set<number>();
+
+  for (const s of sobrantes) {
+    const surplusQty = s.cantidadFisica - s.cantidadTeorica;
+    for (const f of faltantes) {
+      if (used.has(f.id)) continue;
+      const deficitQty = f.cantidadTeorica - f.cantidadFisica;
+      const diff = Math.abs(surplusQty - deficitQty);
+      const tolerance = Math.max(2, Math.round(Math.max(surplusQty, deficitQty) * 0.15));
+      if (diff <= tolerance) {
+        pairs.push({ surplus: s, deficit: f, surplusQty, deficitQty, diff });
+        used.add(f.id);
+        break;
+      }
+    }
+  }
+  return pairs.sort((a, b) => a.diff - b.diff);
+}
+
 // ─── Dashboard ──────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -313,6 +509,7 @@ export default function Dashboard() {
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
   const [historyItem, setHistoryItem] = useState<CachedItem | null>(null);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showLocations, setShowLocations] = useState(false);
 
   const filteredItems = useMemo(() => {
     if (!search) return items;
@@ -332,6 +529,8 @@ export default function Dashboard() {
   const totalCuadrados = items.filter((i) => getItemStatus(i) === "Cuadrado").length;
   const totalSobrantes = items.filter((i) => getItemStatus(i) === "Sobrante").length;
   const totalFaltantes = items.filter((i) => getItemStatus(i) === "Faltante").length;
+
+  const swappedPairs = useMemo(() => detectSwappedCodes(items), [items]);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
@@ -515,6 +714,12 @@ export default function Dashboard() {
           onClose={() => setShowParticipants(false)}
         />
       )}
+      {showLocations && (
+        <LocationsModal
+          inventoryId={inventoryId}
+          onClose={() => setShowLocations(false)}
+        />
+      )}
 
       {/* Offline warning banner */}
       {status === "offline" && (
@@ -539,7 +744,20 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <SWBadge />
             <OfflineIndicator status={status} pendingCount={pendingCount} onSync={forceSync} />
+
+            {/* Locations button */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="font-semibold border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              onClick={() => setShowLocations(true)}
+              title="Gestionar locaciones"
+            >
+              <MapPin className="w-4 h-4 mr-2" />
+              <span className="hidden md:inline">Locaciones</span>
+            </Button>
 
             {/* Participants button */}
             <Button
@@ -550,10 +768,10 @@ export default function Dashboard() {
               data-testid="btn-participants"
             >
               <Users className="w-4 h-4 mr-2" />
-              Participantes
+              <span className="hidden md:inline">Participantes</span>
             </Button>
 
-            <span className="text-sm font-medium text-slate-300 hidden md:inline-block">{today}</span>
+            <span className="text-sm font-medium text-slate-300 hidden lg:inline-block">{today}</span>
             <Link href={`/scanner/${inventoryId}`}>
               <Button
                 size="sm"
@@ -562,7 +780,7 @@ export default function Dashboard() {
                 data-testid="btn-scanner-mode"
               >
                 <ScanBarcode className="w-4 h-4 mr-2" />
-                Escáner
+                <span className="hidden sm:inline">Escáner</span>
               </Button>
             </Link>
             <Button
@@ -639,18 +857,25 @@ export default function Dashboard() {
           </div>
 
           <Tabs defaultValue="pendientes" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6 bg-slate-100 p-1">
-              <TabsTrigger value="pendientes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium" data-testid="tab-pendientes">
-                Pendientes <Badge variant="secondary" className="ml-2 bg-slate-200 text-slate-700">{pendientes.length}</Badge>
+            <TabsList className="grid w-full grid-cols-5 mb-6 bg-slate-100 p-1">
+              <TabsTrigger value="pendientes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-pendientes">
+                Pendientes <Badge variant="secondary" className="ml-1 sm:ml-2 bg-slate-200 text-slate-700">{pendientes.length}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="cuadrados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium" data-testid="tab-cuadrados">
-                Cuadrados <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700">{cuadrados.length}</Badge>
+              <TabsTrigger value="cuadrados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-cuadrados">
+                Cuadrados <Badge variant="secondary" className="ml-1 sm:ml-2 bg-emerald-100 text-emerald-700">{cuadrados.length}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="sobrantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium" data-testid="tab-sobrantes">
-                Sobrantes <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-700">{sobrantes.length}</Badge>
+              <TabsTrigger value="sobrantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-sobrantes">
+                Sobrantes <Badge variant="secondary" className="ml-1 sm:ml-2 bg-amber-100 text-amber-700">{sobrantes.length}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="faltantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium" data-testid="tab-faltantes">
-                Faltantes <Badge variant="secondary" className="ml-2 bg-rose-100 text-rose-700">{faltantes.length}</Badge>
+              <TabsTrigger value="faltantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-faltantes">
+                Faltantes <Badge variant="secondary" className="ml-1 sm:ml-2 bg-rose-100 text-rose-700">{faltantes.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="volteados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-volteados">
+                <ArrowLeftRight className="w-3.5 h-3.5 mr-1 shrink-0" />
+                Volteados
+                {swappedPairs.length > 0 && (
+                  <Badge className="ml-1 sm:ml-2 bg-violet-100 text-violet-700 hover:bg-violet-100">{swappedPairs.length}</Badge>
+                )}
               </TabsTrigger>
             </TabsList>
 
@@ -666,9 +891,96 @@ export default function Dashboard() {
             <TabsContent value="faltantes" className="m-0 focus-visible:outline-none">
               {renderTable(faltantes)}
             </TabsContent>
+            <TabsContent value="volteados" className="m-0 focus-visible:outline-none">
+              <SwappedCodesView pairs={swappedPairs} />
+            </TabsContent>
           </Tabs>
         </div>
       </main>
+    </div>
+  );
+}
+
+// ─── Swapped Codes View ───────────────────────────────────────────────────────
+
+function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
+  if (pairs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-4">
+          <ArrowLeftRight className="w-6 h-6 text-emerald-500" />
+        </div>
+        <p className="text-slate-700 font-semibold">No se detectaron posibles códigos volteados</p>
+        <p className="text-slate-400 text-sm mt-1 max-w-md">
+          Aparecen aquí cuando el sobrante de un artículo coincide con el faltante de otro, indicando posible confusión de códigos al escanear.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-start gap-3 mb-4 p-4 bg-violet-50 border border-violet-200 rounded-lg">
+        <ArrowLeftRight className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-violet-900">
+            {pairs.length} posible{pairs.length !== 1 ? "s" : ""} código{pairs.length !== 1 ? "s" : ""} volteado{pairs.length !== 1 ? "s" : ""} detectado{pairs.length !== 1 ? "s" : ""}
+          </p>
+          <p className="text-xs text-violet-700 mt-0.5">
+            Cuando sobran unidades de un artículo y faltan cantidades similares de otro, es probable que el auditor haya escaneado un código incorrecto.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {pairs.map((pair, idx) => (
+          <div key={idx} className="border border-violet-200 bg-violet-50/30 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
+                Par #{idx + 1}
+              </span>
+              {pair.diff === 0 && (
+                <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  Coincidencia exacta
+                </span>
+              )}
+              {pair.diff > 0 && (
+                <span className="text-xs text-slate-500">
+                  Diferencia: {pair.diff} unidad{pair.diff !== 1 ? "es" : ""}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Sobrante</span>
+                  <span className="font-mono text-xs text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
+                    +{pair.surplusQty}
+                  </span>
+                </div>
+                <p className="font-mono text-xs text-slate-500 mb-0.5">{pair.surplus.sku}</p>
+                <p className="text-sm font-semibold text-slate-800 leading-tight">{pair.surplus.descripcion}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Contado: {pair.surplus.cantidadFisica} / Teórico: {pair.surplus.cantidadTeorica}
+                </p>
+              </div>
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold text-rose-700 uppercase tracking-wide">Faltante</span>
+                  <span className="font-mono text-xs text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">
+                    -{pair.deficitQty}
+                  </span>
+                </div>
+                <p className="font-mono text-xs text-slate-500 mb-0.5">{pair.deficit.sku}</p>
+                <p className="text-sm font-semibold text-slate-800 leading-tight">{pair.deficit.descripcion}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Contado: {pair.deficit.cantidadFisica} / Teórico: {pair.deficit.cantidadTeorica}
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { eq, and, desc, max, sql } from "drizzle-orm";
-import { db, inventoriesTable, inventoryItemsTable, countRecordsTable } from "@workspace/db";
+import { db, inventoriesTable, inventoryItemsTable, countRecordsTable, locationsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 
@@ -292,6 +292,75 @@ router.get(
         timestamp: r.timestamp.toISOString(),
       }))
     );
+  }
+);
+
+// ─── Locations ───────────────────────────────────────────────────────────────
+
+// GET /inventories/:inventoryId/locations — list locations (all authenticated users)
+router.get(
+  "/inventories/:inventoryId/locations",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const inventoryId = parseInt(
+      Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0]! : req.params.inventoryId ?? "",
+      10
+    );
+    if (isNaN(inventoryId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const rows = await db
+      .select()
+      .from(locationsTable)
+      .where(eq(locationsTable.inventoryId, inventoryId))
+      .orderBy(locationsTable.name);
+    res.json(rows);
+  }
+);
+
+// POST /inventories/:inventoryId/locations — create location (admin only)
+router.post(
+  "/inventories/:inventoryId/locations",
+  requireAuth,
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const inventoryId = parseInt(
+      Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0]! : req.params.inventoryId ?? "",
+      10
+    );
+    if (isNaN(inventoryId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const { name } = req.body as { name?: unknown };
+    if (!name || typeof name !== "string" || !name.trim()) {
+      res.status(400).json({ error: "name is required" });
+      return;
+    }
+    const [row] = await db
+      .insert(locationsTable)
+      .values({ inventoryId, name: name.trim() })
+      .returning();
+    res.status(201).json(row);
+  }
+);
+
+// DELETE /inventories/:inventoryId/locations/:locId — delete location (admin only)
+router.delete(
+  "/inventories/:inventoryId/locations/:locId",
+  requireAuth,
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const inventoryId = parseInt(
+      Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0]! : req.params.inventoryId ?? "",
+      10
+    );
+    const locId = parseInt(
+      Array.isArray(req.params.locId) ? req.params.locId[0]! : req.params.locId ?? "",
+      10
+    );
+    if (isNaN(inventoryId) || isNaN(locId)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [deleted] = await db
+      .delete(locationsTable)
+      .where(and(eq(locationsTable.id, locId), eq(locationsTable.inventoryId, inventoryId)))
+      .returning();
+    if (!deleted) { res.status(404).json({ error: "Location not found" }); return; }
+    res.json({ ok: true });
   }
 );
 
