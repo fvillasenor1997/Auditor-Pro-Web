@@ -3,8 +3,6 @@ import { Link, useParams } from "wouter";
 import {
   ArrowLeft,
   Save,
-  Minus,
-  Plus,
   Search,
   Loader2,
   AlertCircle,
@@ -24,10 +22,20 @@ import {
   LayoutDashboard,
   FileText,
   FileSpreadsheet,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -45,6 +53,7 @@ import type { CachedItem } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
 import { authHeaders } from "@/lib/auth";
 import { generateInventoryPDF, generateInventoryExcel } from "@/lib/reports";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -513,12 +522,16 @@ export default function Dashboard() {
   const inventoryId = parseInt(params.id ?? "", 10);
   const { toast } = useToast();
 
-  const { items, inventory, status, pendingCount, updateCount, forceSync } =
+  const { user } = useAuth();
+  const { items, inventory, status, pendingCount, forceSync } =
     useInventorySync(inventoryId);
 
   const [search, setSearch] = useState("");
-  const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
   const [historyItem, setHistoryItem] = useState<CachedItem | null>(null);
+  // ── Adjustment modal ──
+  const [adjustTarget, setAdjustTarget] = useState<CachedItem | null>(null);
+  const [adjustValue, setAdjustValue] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
   // ── Cards visibility toggle ──
@@ -562,16 +575,53 @@ export default function Dashboard() {
     .filter((i) => getItemStatus(i) === "Faltante")
     .reduce((s, i) => s + Number(i.precio ?? 0) * (i.cantidadTeorica - i.cantidadFisica), 0);
 
-  const handleUpdateCount = async (item: CachedItem, delta: number) => {
-    setUpdatingIds((prev) => new Set(prev).add(item.id));
+  const openAdjust = (item: CachedItem) => {
+    setAdjustTarget(item);
+    setAdjustValue(String(item.cantidadFisica));
+  };
+
+  const handleAdjustSubmit = async () => {
+    if (!adjustTarget) return;
+    const newQty = parseInt(adjustValue, 10);
+    if (isNaN(newQty) || newQty < 0) {
+      toast({ title: "Cantidad inválida", description: "Ingrese un número entero mayor o igual a cero.", variant: "destructive" });
+      return;
+    }
+    setAdjusting(true);
     try {
-      await updateCount(item, delta);
-    } finally {
-      setUpdatingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item.id);
-        return next;
+      const username = user?.username ?? "admin";
+      const res = await fetch(
+        `${BASE}api/inventories/${inventoryId}/items/${adjustTarget.id}/records`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            username,
+            location: "Ajuste Admin",
+            cantidad: newQty,
+            timestamp: new Date().toISOString(),
+          }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Error al guardar ajuste");
+      }
+      toast({
+        title: "Ajuste guardado",
+        description: `${adjustTarget.sku} — cantidad física actualizada a ${newQty}.`,
       });
+      setAdjustTarget(null);
+      // Refresh inventory from server so cantidadFisica reflects the adjustment
+      await forceSync();
+    } catch (err) {
+      toast({
+        title: "Error al ajustar",
+        description: err instanceof Error ? err.message : "Intente nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setAdjusting(false);
     }
   };
 
@@ -635,9 +685,9 @@ export default function Dashboard() {
                 <TableHead className="w-[110px] font-semibold text-slate-900 whitespace-nowrap hidden md:table-cell">Categoría</TableHead>
                 <TableHead className="w-[80px] text-right font-semibold text-slate-900 whitespace-nowrap hidden sm:table-cell">Precio</TableHead>
                 <TableHead className="w-[80px] text-right font-semibold text-slate-900 whitespace-nowrap">Teórico</TableHead>
-                <TableHead className="w-[160px] text-center font-semibold text-slate-900 whitespace-nowrap">Físico</TableHead>
+                <TableHead className="w-[80px] text-right font-semibold text-slate-900 whitespace-nowrap">Físico</TableHead>
                 <TableHead className="w-[100px] text-center font-semibold text-slate-900 whitespace-nowrap">Estado</TableHead>
-                <TableHead className="w-[52px] text-center font-semibold text-slate-900">Ver</TableHead>
+                <TableHead className="w-[120px] text-center font-semibold text-slate-900">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -657,51 +707,35 @@ export default function Dashboard() {
                       {Number(item.precio ?? 0) > 0 ? `$${Number(item.precio).toFixed(2)}` : "—"}
                     </TableCell>
                     <TableCell className="text-right text-slate-500 font-mono whitespace-nowrap">{item.cantidadTeorica}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center space-x-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                          onClick={() => handleUpdateCount(item, -1)}
-                          disabled={item.cantidadFisica === 0 || updatingIds.has(item.id)}
-                          data-testid={`btn-minus-${item.id}`}
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </Button>
-                        <div className="w-12 text-center font-mono font-semibold text-base text-slate-900">
-                          {updatingIds.has(item.id) ? (
-                            <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
-                          ) : (
-                            item.cantidadFisica
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                          onClick={() => handleUpdateCount(item, 1)}
-                          disabled={updatingIds.has(item.id)}
-                          data-testid={`btn-plus-${item.id}`}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                    <TableCell className="text-right font-mono font-semibold text-base text-slate-900 whitespace-nowrap">
+                      {item.cantidadFisica}
                     </TableCell>
                     <TableCell className="text-center">
                       <StatusBadge status={getItemStatus(item)} />
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                        onClick={() => setHistoryItem(item)}
-                        title="Ver historial de conteo"
-                        data-testid={`btn-history-${item.id}`}
-                      >
-                        <History className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300"
+                          onClick={() => openAdjust(item)}
+                          data-testid={`btn-adjust-${item.id}`}
+                        >
+                          <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />
+                          Ajuste
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                          onClick={() => setHistoryItem(item)}
+                          title="Ver historial"
+                          data-testid={`btn-history-${item.id}`}
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -711,8 +745,9 @@ export default function Dashboard() {
         </div>
       </div>
     ),
-    [updatingIds, handleUpdateCount]
+    [openAdjust, setHistoryItem]
   );
+
 
   if (isNaN(inventoryId)) {
     return (
@@ -753,6 +788,73 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
+      {/* ── Adjustment Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={!!adjustTarget} onOpenChange={(o) => { if (!o && !adjusting) setAdjustTarget(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-violet-600" />
+              Ajuste de Inventario
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción se guardará como transacción en el historial del artículo.
+            </DialogDescription>
+          </DialogHeader>
+          {adjustTarget && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md bg-slate-50 border border-slate-200 p-3 text-sm">
+                <p className="font-mono font-bold text-slate-900 text-xs">{adjustTarget.sku}</p>
+                <p className="text-slate-700 mt-0.5">{adjustTarget.descripcion}</p>
+                <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                  <span>Teórico: <span className="font-semibold text-slate-700">{adjustTarget.cantidadTeorica}</span></span>
+                  <span>Físico actual: <span className="font-semibold text-slate-700">{adjustTarget.cantidadFisica}</span></span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="adj-qty" className="text-sm font-medium">Nueva cantidad física</Label>
+                <Input
+                  id="adj-qty"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={adjustValue}
+                  onChange={(e) => setAdjustValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAdjustSubmit(); }}
+                  className="text-lg font-mono font-semibold h-11 text-center"
+                  autoFocus
+                />
+                {adjustValue !== "" && !isNaN(parseInt(adjustValue)) && (
+                  <p className="text-xs text-slate-500 text-center">
+                    {parseInt(adjustValue) > adjustTarget.cantidadFisica
+                      ? <span className="text-amber-600">▲ +{parseInt(adjustValue) - adjustTarget.cantidadFisica} unidades respecto al actual</span>
+                      : parseInt(adjustValue) < adjustTarget.cantidadFisica
+                      ? <span className="text-rose-600">▼ −{adjustTarget.cantidadFisica - parseInt(adjustValue)} unidades respecto al actual</span>
+                      : <span className="text-slate-400">Sin cambio</span>
+                    }
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setAdjustTarget(null)} disabled={adjusting}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAdjustSubmit}
+              disabled={adjusting || adjustValue === ""}
+              className="bg-violet-700 hover:bg-violet-800 text-white"
+            >
+              {adjusting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando...</>
+              ) : (
+                <><SlidersHorizontal className="w-4 h-4 mr-2" />Guardar Ajuste</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modals */}
       {historyItem && (
         <HistoryModal

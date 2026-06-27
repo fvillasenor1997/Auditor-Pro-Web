@@ -244,8 +244,8 @@ router.post(
       res.status(400).json({ error: "location is required" });
       return;
     }
-    if (cantidad === undefined || typeof cantidad !== "number" || cantidad <= 0) {
-      res.status(400).json({ error: "cantidad must be a positive number" });
+    if (cantidad === undefined || typeof cantidad !== "number" || cantidad < 0) {
+      res.status(400).json({ error: "cantidad must be a non-negative number" });
       return;
     }
 
@@ -255,6 +255,13 @@ router.post(
       .insert(countRecordsTable)
       .values({ inventoryId, itemId, username, location, cantidad, timestamp: ts })
       .returning();
+
+    // Admin adjustment: override cantidadFisica directly with the declared quantity
+    if (typeof location === "string" && location.startsWith("Ajuste")) {
+      await db.update(inventoryItemsTable)
+        .set({ cantidadFisica: cantidad })
+        .where(and(eq(inventoryItemsTable.id, itemId), eq(inventoryItemsTable.inventoryId, inventoryId)));
+    }
 
     res.status(201).json(record);
   }
