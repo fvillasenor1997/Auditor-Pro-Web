@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Save, Minus, Plus, Search, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Minus, Plus, Search, Loader2, AlertCircle, ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -227,9 +227,20 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <OfflineIndicator status={status} pendingCount={pendingCount} onSync={forceSync} />
             <span className="text-sm font-medium text-slate-300 hidden md:inline-block">{today}</span>
+            <Link href={`/scanner/${inventoryId}`}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="font-semibold border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+                data-testid="btn-scanner-mode"
+              >
+                <ScanBarcode className="w-4 h-4 mr-2" />
+                Escáner
+              </Button>
+            </Link>
             <Button
               size="sm"
               variant="secondary"
