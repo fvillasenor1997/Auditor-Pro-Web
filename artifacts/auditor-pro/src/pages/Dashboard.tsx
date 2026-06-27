@@ -469,35 +469,38 @@ function LocationsModal({
 
 // ─── Swapped Codes Detection ──────────────────────────────────────────────────
 
-interface SwappedPair {
-  surplus: CachedItem;
-  deficit: CachedItem;
-  surplusQty: number;
-  deficitQty: number;
+interface DiscrepancyGroup {
+  /** absolute difference value, e.g. 1, 2, 5 */
   diff: number;
+  surplus: Array<{ item: CachedItem; qty: number }>;
+  deficit: Array<{ item: CachedItem; qty: number }>;
 }
 
-function detectSwappedCodes(items: CachedItem[]): SwappedPair[] {
-  const sobrantes = items.filter((i) => i.cantidadFisica > i.cantidadTeorica);
-  const faltantes = items.filter((i) => i.cantidadFisica < i.cantidadTeorica && i.cantidadFisica > 0);
-  const pairs: SwappedPair[] = [];
-  const used = new Set<number>();
+function detectSwappedGroups(items: CachedItem[]): DiscrepancyGroup[] {
+  const map = new Map<number, DiscrepancyGroup>();
 
-  for (const s of sobrantes) {
-    const surplusQty = s.cantidadFisica - s.cantidadTeorica;
-    for (const f of faltantes) {
-      if (used.has(f.id)) continue;
-      const deficitQty = f.cantidadTeorica - f.cantidadFisica;
-      const diff = Math.abs(surplusQty - deficitQty);
-      const tolerance = Math.max(2, Math.round(Math.max(surplusQty, deficitQty) * 0.15));
-      if (diff <= tolerance) {
-        pairs.push({ surplus: s, deficit: f, surplusQty, deficitQty, diff });
-        used.add(f.id);
-        break;
-      }
+  for (const item of items) {
+    const d = item.cantidadFisica - item.cantidadTeorica;
+    if (d === 0) continue;
+    // Only include deficit items that have been counted (cantidadFisica > 0)
+    if (d < 0 && item.cantidadFisica === 0) continue;
+
+    const key = Math.abs(d);
+    if (!map.has(key)) {
+      map.set(key, { diff: key, surplus: [], deficit: [] });
+    }
+    const group = map.get(key)!;
+    if (d > 0) {
+      group.surplus.push({ item, qty: d });
+    } else {
+      group.deficit.push({ item, qty: Math.abs(d) });
     }
   }
-  return pairs.sort((a, b) => a.diff - b.diff);
+
+  // Only keep groups that have BOTH surplus and deficit items (potential swaps)
+  return [...map.values()]
+    .filter((g) => g.surplus.length > 0 && g.deficit.length > 0)
+    .sort((a, b) => a.diff - b.diff);
 }
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────────
@@ -537,7 +540,7 @@ export default function Dashboard() {
   const totalSobrantes = items.filter((i) => getItemStatus(i) === "Sobrante").length;
   const totalFaltantes = items.filter((i) => getItemStatus(i) === "Faltante").length;
 
-  const swappedPairs = useMemo(() => detectSwappedCodes(items), [items]);
+  const swappedGroups = useMemo(() => detectSwappedGroups(items), [items]);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
@@ -924,8 +927,8 @@ export default function Dashboard() {
                 <TabsTrigger value="volteados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs" data-testid="tab-volteados">
                   <ArrowLeftRight className="w-3 h-3 mr-1 shrink-0" />
                   Volteados
-                  {swappedPairs.length > 0 && (
-                    <Badge className="ml-1 bg-violet-100 text-violet-700 hover:bg-violet-100 text-xs px-1.5">{swappedPairs.length}</Badge>
+                  {swappedGroups.length > 0 && (
+                    <Badge className="ml-1 bg-violet-100 text-violet-700 hover:bg-violet-100 text-xs px-1.5">{swappedGroups.length}</Badge>
                   )}
                 </TabsTrigger>
               </TabsList>
@@ -944,7 +947,7 @@ export default function Dashboard() {
               {renderTable(faltantes)}
             </TabsContent>
             <TabsContent value="volteados" className="m-0 focus-visible:outline-none">
-              <SwappedCodesView pairs={swappedPairs} />
+              <SwappedCodesView groups={swappedGroups} />
             </TabsContent>
           </Tabs>
         </div>
@@ -955,8 +958,8 @@ export default function Dashboard() {
 
 // ─── Swapped Codes View ───────────────────────────────────────────────────────
 
-function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
-  if (pairs.length === 0) {
+function SwappedCodesView({ groups }: { groups: DiscrepancyGroup[] }) {
+  if (groups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-4">
@@ -964,66 +967,108 @@ function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
         </div>
         <p className="text-slate-700 font-semibold">No se detectaron posibles códigos volteados</p>
         <p className="text-slate-400 text-sm mt-1 max-w-md">
-          Aparecen aquí cuando el sobrante de un artículo coincide con el faltante de otro.
+          Aparecen aquí cuando el sobrante de un artículo coincide con el faltante de otro en la misma cantidad.
         </p>
       </div>
     );
   }
 
+  const totalItems = groups.reduce((s, g) => s + g.surplus.length + g.deficit.length, 0);
+
   return (
-    <div>
-      <div className="flex items-start gap-3 mb-4 p-3 sm:p-4 bg-violet-50 border border-violet-200 rounded-lg">
+    <div className="space-y-5">
+      {/* Header alert */}
+      <div className="flex items-start gap-3 p-3 sm:p-4 bg-violet-50 border border-violet-200 rounded-lg">
         <ArrowLeftRight className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-violet-900">
-            {pairs.length} posible{pairs.length !== 1 ? "s" : ""} código{pairs.length !== 1 ? "s" : ""} volteado{pairs.length !== 1 ? "s" : ""} detectado{pairs.length !== 1 ? "s" : ""}
+            {groups.length} grupo{groups.length !== 1 ? "s" : ""} de posibles códigos volteados — {totalItems} artículo{totalItems !== 1 ? "s" : ""}
           </p>
           <p className="text-xs text-violet-700 mt-0.5">
-            Cuando sobran unidades de un artículo y faltan cantidades similares de otro, es probable que el auditor haya escaneado un código incorrecto.
+            Artículos agrupados por su diferencia exacta. Los sobrantes y faltantes con el mismo valor pueden indicar que se escaneó el código incorrecto.
           </p>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {pairs.map((pair, idx) => (
-          <div key={idx} className="border border-violet-200 bg-violet-50/30 rounded-lg p-3 sm:p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
-                Par #{idx + 1}
-              </span>
-              {pair.diff === 0 ? (
-                <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                  Coincidencia exacta
-                </span>
-              ) : (
-                <span className="text-xs text-slate-500">
-                  Diferencia: {pair.diff} unidad{pair.diff !== 1 ? "es" : ""}
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Sobrante</span>
-                  <span className="font-mono text-xs text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">+{pair.surplusQty}</span>
-                </div>
-                <p className="font-mono text-xs text-slate-500 mb-0.5">{pair.surplus.sku}</p>
-                <p className="text-sm font-semibold text-slate-800 leading-tight">{pair.surplus.descripcion}</p>
-                <p className="text-xs text-slate-500 mt-1">Contado: {pair.surplus.cantidadFisica} / Teórico: {pair.surplus.cantidadTeorica}</p>
-              </div>
-              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold text-rose-700 uppercase tracking-wide">Faltante</span>
-                  <span className="font-mono text-xs text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">-{pair.deficitQty}</span>
-                </div>
-                <p className="font-mono text-xs text-slate-500 mb-0.5">{pair.deficit.sku}</p>
-                <p className="text-sm font-semibold text-slate-800 leading-tight">{pair.deficit.descripcion}</p>
-                <p className="text-xs text-slate-500 mt-1">Contado: {pair.deficit.cantidadFisica} / Teórico: {pair.deficit.cantidadTeorica}</p>
-              </div>
-            </div>
+      {/* One table per discrepancy group */}
+      {groups.map((group) => (
+        <div key={group.diff} className="border border-slate-200 rounded-lg overflow-hidden">
+          {/* Group header */}
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-violet-50 border-b border-violet-100">
+            <span className="text-sm font-bold text-violet-700">
+              Diferencia: {group.diff} unidad{group.diff !== 1 ? "es" : ""}
+            </span>
+            <span className="text-xs text-violet-500">
+              {group.surplus.length} sobrante{group.surplus.length !== 1 ? "s" : ""} · {group.deficit.length} faltante{group.deficit.length !== 1 ? "s" : ""}
+            </span>
           </div>
-        ))}
-      </div>
+
+          <div className="overflow-x-auto">
+            <Table className="min-w-[520px]">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="w-8 pl-4"></TableHead>
+                  <TableHead className="font-semibold text-slate-700 whitespace-nowrap">SKU</TableHead>
+                  <TableHead className="font-semibold text-slate-700">Descripción</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700 whitespace-nowrap hidden sm:table-cell">Teórico</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700 whitespace-nowrap">Físico</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700 whitespace-nowrap">Diferencia</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* Surplus rows */}
+                {group.surplus.map(({ item, qty }) => (
+                  <TableRow key={`s-${item.id}`} className="bg-amber-50/40 hover:bg-amber-50">
+                    <TableCell className="pl-4">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">S</span>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">{item.sku}</TableCell>
+                    <TableCell className="font-medium text-slate-800">{item.descripcion}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-500 whitespace-nowrap hidden sm:table-cell">{item.cantidadTeorica}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-700 whitespace-nowrap">{item.cantidadFisica}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <span className="font-mono font-semibold text-amber-600">+{qty}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {/* Divider row if both groups exist */}
+                {group.surplus.length > 0 && group.deficit.length > 0 && (
+                  <TableRow className="border-t-2 border-dashed border-slate-200">
+                    <TableCell colSpan={6} className="py-0.5 bg-slate-50" />
+                  </TableRow>
+                )}
+                {/* Deficit rows */}
+                {group.deficit.map(({ item, qty }) => (
+                  <TableRow key={`d-${item.id}`} className="bg-rose-50/40 hover:bg-rose-50">
+                    <TableCell className="pl-4">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">F</span>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">{item.sku}</TableCell>
+                    <TableCell className="font-medium text-slate-800">{item.descripcion}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-500 whitespace-nowrap hidden sm:table-cell">{item.cantidadTeorica}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-700 whitespace-nowrap">{item.cantidadFisica}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <span className="font-mono font-semibold text-rose-600">-{qty}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Group footer with legend */}
+          <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-[9px]">S</span>
+              Sobrante
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-[9px]">F</span>
+              Faltante
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
