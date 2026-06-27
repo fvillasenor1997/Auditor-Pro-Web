@@ -4,6 +4,7 @@ import {
   queuePendingUpdate,
   updateLocalItem,
 } from "./db";
+import { authHeaders } from "./auth";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -19,7 +20,7 @@ export async function flushPendingUpdates(
         `${BASE}api/inventories/${update.inventoryId}/items/${update.itemId}`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ cantidadFisica: update.cantidadFisica }),
         }
       );
@@ -54,7 +55,7 @@ export async function syncItemUpdate(
       `${BASE}api/inventories/${inventoryId}/items/${itemId}`,
       {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ cantidadFisica }),
       }
     );
@@ -69,7 +70,9 @@ export async function syncItemUpdate(
 }
 
 export async function fetchAndCacheInventory(inventoryId: number) {
-  const res = await fetch(`${BASE}api/inventories/${inventoryId}`);
+  const res = await fetch(`${BASE}api/inventories/${inventoryId}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to fetch inventory");
   return res.json();
 }

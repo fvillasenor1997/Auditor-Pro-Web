@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { useLocation } from "wouter";
-import { Plus, FolderOpen, UploadCloud, FileSpreadsheet, Loader2 } from "lucide-react";
+import { useLocation, Link } from "wouter";
+import { Plus, FolderOpen, UploadCloud, FileSpreadsheet, Loader2, Users, LogOut, ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Card,
   CardContent,
@@ -25,6 +26,12 @@ import { useToast } from "@/hooks/use-toast";
 export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    setLocation("/login");
+  };
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isOpenModalOpen, setIsOpenModalOpen] = useState(false);
@@ -65,8 +72,10 @@ export default function Home() {
         formData.append("file", selectedFile);
       }
 
+      const token = localStorage.getItem("auditor_pro_token");
       const res = await fetch(`${import.meta.env.BASE_URL}api/inventories/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
 
@@ -81,7 +90,7 @@ export default function Home() {
       setNewInvLocation("");
       setNewInvDate("");
       setSelectedFile(null);
-      setLocation(`/dashboard/${inventory.id}`);
+      setLocation(`/admin/inventory/${inventory.id}`);
     } catch (err) {
       toast({
         title: "Error al crear inventario",
@@ -95,11 +104,33 @@ export default function Home() {
 
   const handleOpen = (id: number) => {
     setIsOpenModalOpen(false);
-    setLocation(`/dashboard/${id}`);
+    setLocation(`/admin/inventory/${id}`);
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-50">
+    <div className="min-h-screen w-full flex flex-col bg-slate-50">
+      {/* Admin Header */}
+      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-md bg-slate-900 flex items-center justify-center">
+            <ScanBarcode className="w-4 h-4 text-white" />
+          </div>
+          <span className="font-bold text-slate-900">Auditor Pro</span>
+          <span className="text-xs text-slate-400 ml-2">Admin: @{user?.username}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/users">
+            <Button variant="outline" size="sm" className="text-slate-600 border-slate-300 hover:bg-slate-50" data-testid="btn-users">
+              <Users className="w-4 h-4 mr-2" /> Usuarios
+            </Button>
+          </Link>
+          <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={handleLogout} data-testid="btn-logout">
+            <LogOut className="w-4 h-4 mr-2" /> Salir
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex-1 flex flex-col items-center justify-center">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight" data-testid="text-app-title">
           Auditor Pro
@@ -303,6 +334,7 @@ export default function Home() {
           </div>
         </DialogContent>
       </Dialog>
+      </div> {/* end flex-1 center */}
     </div>
   );
 }

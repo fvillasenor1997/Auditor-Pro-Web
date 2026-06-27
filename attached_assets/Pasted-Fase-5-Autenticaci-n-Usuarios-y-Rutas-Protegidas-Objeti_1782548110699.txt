@@ -1,0 +1,45 @@
+Fase 5: Autenticación, Usuarios y Rutas Protegidas
+
+Objetivo: Crear la base de datos de usuarios, el sistema de login y proteger la aplicación.
+
+Copia y pega esto en Replit:
+
+    Excelente trabajo hasta ahora. La base funcional ya está lista. Ahora vamos a agregar un sistema de Autenticación y Control de Roles para separar las vistas. El sistema debe ser independiente.
+
+    Instrucciones Fase 5:
+
+        Backend (Base de Datos): Crea un nuevo modelo User en SQLite con los campos: id, username, password (hasheada con bcrypt), y role (Enum: 'admin' | 'auditor').
+
+        Backend (Auth): Crea un endpoint POST /api/login que valide las credenciales y devuelva un token JWT con el rol del usuario. Crea un script rápido o endpoint temporal para registrar un usuario 'admin' por defecto.
+
+        Frontend (Login): Crea una pantalla de Inicio de Sesión (/login) moderna que sea la primera vista al entrar a la app web.
+
+        React Router (Rutas Protegidas): Implementa un middleware o AuthProvider en React.
+
+            Si el login es exitoso y el rol es admin, redirige a /admin/dashboard.
+
+            Si el rol es auditor, redirige a /auditor/conteo.
+
+            Bloquea el acceso a cualquier ruta si no hay token.
+
+Fase 6: Separación de Roles (Admin vs. Auditor) y Conteo Ciego
+
+Objetivo: Mover las tablas al panel del administrador y restringir al auditor para que solo vea el escáner sin las cantidades teóricas.
+
+Copia y pega esto en Replit:
+
+    Perfecto. Ahora vamos a reorganizar la UI que ya construimos dependiendo del rol del usuario autenticado. Implementaremos la lógica de "Conteo Ciego" para los auditores.
+
+    Instrucciones Fase 6:
+
+        Panel de Administración (/admin/dashboard): >    - Mueve toda la vista de consolidación (las tablas con pestañas de "Pendientes", "Cuadrados", etc.) y el botón de "Subir Excel" EXCLUSIVAMENTE a esta ruta. El admin es el único que puede ver esto.
+
+            Agrega una nueva sección en el menú del admin llamada "Contadores/Usuarios" donde el admin pueda crear nuevas cuentas con el rol 'auditor' (asignando username y password).
+
+        Panel del Auditor (/auditor/conteo):
+
+            Mueve la "Vista de Conteo y Escáner" (la que usa la cámara y botones gigantes) EXCLUSIVAMENTE a esta ruta.
+
+            REGLA CRÍTICA (Conteo Ciego): Modifica el endpoint o la consulta a la base de datos para que, cuando un 'auditor' descargue el inventario a su IndexedDB (modo offline), el backend NUNCA le envíe la cantidad_teorica. El auditor solo debe recibir sku, descripcion, y su propia cantidad_fisica.
+
+        Flujo de trabajo final: Asegúrate de que los conteos que haga el auditor en su escáner se sigan sincronizando correctamente (vía Background Sync) hacia el backend, de modo que el Admin pueda ver en tiempo real cómo se actualizan las tablas de consolidación en su pantalla.

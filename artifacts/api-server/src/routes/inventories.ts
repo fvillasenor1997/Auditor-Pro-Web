@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { eq, and } from "drizzle-orm";
 import { db, inventoriesTable, inventoryItemsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -39,7 +40,7 @@ const upload = multer({
   },
 });
 
-router.get("/inventories", async (req, res): Promise<void> => {
+router.get("/inventories", requireAuth, async (req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(inventoriesTable)
@@ -55,6 +56,8 @@ router.get("/inventories", async (req, res): Promise<void> => {
 
 router.post(
   "/inventories/upload",
+  requireAuth,
+  requireAdmin,
   upload.single("file"),
   async (req, res): Promise<void> => {
     const { name, location, date } = req.body as {
@@ -126,7 +129,7 @@ router.post(
   }
 );
 
-router.get("/inventories/:inventoryId", async (req, res): Promise<void> => {
+router.get("/inventories/:inventoryId", requireAuth, async (req, res): Promise<void> => {
   const rawId = Array.isArray(req.params.inventoryId)
     ? req.params.inventoryId[0]
     : req.params.inventoryId;
@@ -147,10 +150,16 @@ router.get("/inventories/:inventoryId", async (req, res): Promise<void> => {
     return;
   }
 
-  const items = await db
+  const rawItems = await db
     .select()
     .from(inventoryItemsTable)
     .where(eq(inventoryItemsTable.inventoryId, inventoryId));
+
+  // Blind counting for auditors: hide cantidadTeorica
+  const isAuditor = req.user?.role === "auditor";
+  const items = isAuditor
+    ? rawItems.map((item) => ({ ...item, cantidadTeorica: 0 }))
+    : rawItems;
 
   res.json({
     ...inventory,
@@ -161,6 +170,7 @@ router.get("/inventories/:inventoryId", async (req, res): Promise<void> => {
 
 router.patch(
   "/inventories/:inventoryId/items/:itemId",
+  requireAuth,
   async (req, res): Promise<void> => {
     const rawInvId = Array.isArray(req.params.inventoryId)
       ? req.params.inventoryId[0]
