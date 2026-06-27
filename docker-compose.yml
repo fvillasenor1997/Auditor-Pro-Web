@@ -1,0 +1,46 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Base de Datos independiente para Auditor Pro
+  postgres-auditor:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: auditor_user
+      POSTGRES_PASSWORD: auditor_password_seguro
+      POSTGRES_DB: auditor_pro_db
+    volumes:
+      - auditor_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # Puerto 5433 externo para no chocar con Saasia
+    restart: unless-stopped
+
+  # El Backend
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      # Conexión interna a la base de datos
+      - DATABASE_URL=postgres://auditor_user:auditor_password_seguro@postgres-auditor:5432/auditor_pro_db
+      - PORT=3000
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres-auditor
+    restart: unless-stopped
+
+  # El Frontend Web
+  web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8080:80" # Tu app web estará en el puerto 8080
+    depends_on:
+      - api-server
+    restart: unless-stopped
+
+volumes:
+  auditor_pgdata:
