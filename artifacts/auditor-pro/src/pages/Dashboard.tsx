@@ -19,6 +19,9 @@ import {
   Wifi,
   WifiOff,
   Download,
+  ChevronDown,
+  ChevronUp,
+  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,13 +57,13 @@ const getItemStatus = (item: CachedItem): ItemStatus => {
 const StatusBadge = ({ status }: { status: ItemStatus }) => {
   switch (status) {
     case "Cuadrado":
-      return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200">Cuadrado</Badge>;
+      return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200 text-xs whitespace-nowrap">Cuadrado</Badge>;
     case "Sobrante":
-      return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">Sobrante</Badge>;
+      return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200 text-xs whitespace-nowrap">Sobrante</Badge>;
     case "Faltante":
-      return <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100 border-rose-200">Faltante</Badge>;
+      return <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100 border-rose-200 text-xs whitespace-nowrap">Faltante</Badge>;
     default:
-      return <Badge variant="outline" className="text-slate-500 bg-slate-50">Pendiente</Badge>;
+      return <Badge variant="outline" className="text-slate-500 bg-slate-50 text-xs whitespace-nowrap">Pendiente</Badge>;
   }
 };
 
@@ -104,14 +107,14 @@ function SWBadge() {
     return (
       <span className="flex items-center gap-1.5 text-xs text-amber-300 font-medium" title="Descargando para uso offline...">
         <Download className="w-3.5 h-3.5 animate-bounce" />
-        <span className="hidden sm:inline">Descargando</span>
+        <span className="hidden lg:inline">Descargando</span>
       </span>
     );
   }
   return (
     <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium" title="Listo para trabajar sin conexión">
       <Wifi className="w-3.5 h-3.5" />
-      <span className="hidden sm:inline">Offline listo</span>
+      <span className="hidden lg:inline">Offline listo</span>
     </span>
   );
 }
@@ -150,27 +153,27 @@ function HistoryModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-200">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <History className="w-5 h-5 text-slate-500" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-start justify-between px-4 sm:px-6 py-4 border-b border-slate-200">
+          <div className="min-w-0 flex-1 pr-4">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+              <History className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 shrink-0" />
               Detalle de Conteo
             </h2>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
               <span className="font-mono">{item.sku}</span> — {item.descripcion}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500"
+            className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500 shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto px-6 py-4">
+        <div className="flex-1 overflow-auto">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
@@ -188,43 +191,45 @@ function HistoryModal({
             </p>
           )}
           {records !== null && records.length > 0 && (
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-semibold text-slate-900">Auditor</TableHead>
-                  <TableHead className="font-semibold text-slate-900">Locación</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-900">Cantidad</TableHead>
-                  <TableHead className="font-semibold text-slate-900">Hora</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium text-slate-800">@{r.username}</TableCell>
-                    <TableCell className="text-slate-600">
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        {r.location}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-semibold text-slate-900">
-                      +{r.cantidad}
-                    </TableCell>
-                    <TableCell className="text-slate-500 text-sm whitespace-nowrap">
-                      {formatTime(r.timestamp)}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-semibold text-slate-900 whitespace-nowrap">Auditor</TableHead>
+                    <TableHead className="font-semibold text-slate-900 whitespace-nowrap">Locación</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-900 whitespace-nowrap">Cantidad</TableHead>
+                    <TableHead className="font-semibold text-slate-900 whitespace-nowrap">Hora</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {records.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium text-slate-800 whitespace-nowrap">@{r.username}</TableCell>
+                      <TableCell className="text-slate-600">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {r.location}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold text-slate-900">
+                        +{r.cantidad}
+                      </TableCell>
+                      <TableCell className="text-slate-500 text-sm whitespace-nowrap">
+                        {formatTime(r.timestamp)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
 
         {records !== null && records.length > 0 && (
-          <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between rounded-b-xl">
+          <div className="px-4 sm:px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between rounded-b-xl">
             <span className="text-sm text-slate-500">{records.length} registro{records.length !== 1 ? "s" : ""}</span>
             <span className="text-sm font-semibold text-slate-900">
-              Total contado:{" "}
+              Total:{" "}
               <span className="font-mono">{records.reduce((s, r) => s + r.cantidad, 0)}</span>
             </span>
           </div>
@@ -266,11 +271,11 @@ function ParticipantsModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Users className="w-5 h-5 text-slate-500" />
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
             Participantes
           </h2>
           <button
@@ -281,7 +286,7 @@ function ParticipantsModal({
           </button>
         </div>
 
-        <div className="px-6 py-4 max-h-[60vh] overflow-auto">
+        <div className="px-4 sm:px-6 py-4 max-h-[60vh] overflow-auto">
           {loading && (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
@@ -304,19 +309,19 @@ function ParticipantsModal({
                   key={p.username}
                   className="flex items-center justify-between py-3 px-4 bg-slate-50 rounded-lg border border-slate-200"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-white text-sm font-bold">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-white text-sm font-bold shrink-0">
                       {p.username[0]?.toUpperCase()}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-semibold text-slate-900 text-sm">@{p.username}</p>
                       <p className="text-xs text-slate-500">{p.totalRecords} registro{p.totalRecords !== 1 ? "s" : ""}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0 ml-3">
                     <p className="text-xs text-slate-400 flex items-center gap-1 justify-end">
                       <Clock className="w-3 h-3" />
-                      Último conteo
+                      Último
                     </p>
                     <p className="text-xs font-medium text-slate-700">
                       {formatTime(p.lastActivity)}
@@ -390,11 +395,11 @@ function LocationsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-slate-500" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
             Locaciones
           </h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500">
@@ -402,7 +407,7 @@ function LocationsModal({
           </button>
         </div>
 
-        <div className="px-6 py-4 border-b border-slate-100">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-100">
           <p className="text-xs text-slate-500 mb-3">Los auditores solo pueden elegir de esta lista al momento de contar.</p>
           <div className="flex gap-2">
             <Input
@@ -420,7 +425,7 @@ function LocationsModal({
           {error && <p className="text-xs text-rose-500 mt-2">{error}</p>}
         </div>
 
-        <div className="flex-1 overflow-auto px-6 py-3">
+        <div className="flex-1 overflow-auto px-4 sm:px-6 py-3">
           {loading && (
             <div className="flex justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
@@ -435,13 +440,13 @@ function LocationsModal({
             <div className="space-y-1">
               {locations.map((loc) => (
                 <div key={loc.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors group">
-                  <span className="flex items-center gap-2 text-sm text-slate-700">
+                  <span className="flex items-center gap-2 text-sm text-slate-700 min-w-0 truncate">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     {loc.name}
                   </span>
                   <button
                     onClick={() => handleDelete(loc.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-2"
                     title="Eliminar locación"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -452,7 +457,7 @@ function LocationsModal({
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+        <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
           <p className="text-xs text-slate-400">
             {locations?.length ?? 0} locación{(locations?.length ?? 0) !== 1 ? "es" : ""} registrada{(locations?.length ?? 0) !== 1 ? "s" : ""}
           </p>
@@ -510,6 +515,8 @@ export default function Dashboard() {
   const [historyItem, setHistoryItem] = useState<CachedItem | null>(null);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
+  // ── Cards visibility toggle ──
+  const [cardsVisible, setCardsVisible] = useState(true);
 
   const filteredItems = useMemo(() => {
     if (!search) return items;
@@ -575,87 +582,89 @@ export default function Dashboard() {
   const renderTable = useCallback(
     (data: CachedItem[]) => (
       <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader className="bg-slate-50">
-            <TableRow className="hover:bg-slate-50">
-              <TableHead className="w-[120px] font-semibold text-slate-900">SKU</TableHead>
-              <TableHead className="font-semibold text-slate-900">Descripción</TableHead>
-              <TableHead className="w-[130px] font-semibold text-slate-900">Categoría</TableHead>
-              <TableHead className="w-[90px] text-right font-semibold text-slate-900">Precio</TableHead>
-              <TableHead className="w-[90px] text-right font-semibold text-slate-900">Teórico</TableHead>
-              <TableHead className="w-[180px] text-center font-semibold text-slate-900">Físico</TableHead>
-              <TableHead className="w-[110px] text-center font-semibold text-slate-900">Estado</TableHead>
-              <TableHead className="w-[60px] text-center font-semibold text-slate-900">Ver</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-slate-500">
-                  No hay registros en esta vista.
-                </TableCell>
+        <div className="overflow-x-auto w-full">
+          <Table className="min-w-[700px]">
+            <TableHeader className="bg-slate-50">
+              <TableRow className="hover:bg-slate-50">
+                <TableHead className="w-[100px] font-semibold text-slate-900 whitespace-nowrap">SKU</TableHead>
+                <TableHead className="font-semibold text-slate-900">Descripción</TableHead>
+                <TableHead className="w-[110px] font-semibold text-slate-900 whitespace-nowrap hidden md:table-cell">Categoría</TableHead>
+                <TableHead className="w-[80px] text-right font-semibold text-slate-900 whitespace-nowrap hidden sm:table-cell">Precio</TableHead>
+                <TableHead className="w-[80px] text-right font-semibold text-slate-900 whitespace-nowrap">Teórico</TableHead>
+                <TableHead className="w-[160px] text-center font-semibold text-slate-900 whitespace-nowrap">Físico</TableHead>
+                <TableHead className="w-[100px] text-center font-semibold text-slate-900 whitespace-nowrap">Estado</TableHead>
+                <TableHead className="w-[52px] text-center font-semibold text-slate-900">Ver</TableHead>
               </TableRow>
-            ) : (
-              data.map((item) => (
-                <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
-                  <TableCell className="font-medium font-mono text-xs">{item.sku}</TableCell>
-                  <TableCell className="text-slate-700 font-medium">{item.descripcion}</TableCell>
-                  <TableCell className="text-slate-500 text-sm">{item.categoria}</TableCell>
-                  <TableCell className="text-right text-slate-600 font-mono text-sm">
-                    {Number(item.precio ?? 0) > 0 ? `$${Number(item.precio).toFixed(2)}` : "—"}
-                  </TableCell>
-                  <TableCell className="text-right text-slate-500 font-mono">{item.cantidadTeorica}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                        onClick={() => handleUpdateCount(item, -1)}
-                        disabled={item.cantidadFisica === 0 || updatingIds.has(item.id)}
-                        data-testid={`btn-minus-${item.id}`}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900">
-                        {updatingIds.has(item.id) ? (
-                          <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
-                        ) : (
-                          item.cantidadFisica
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                        onClick={() => handleUpdateCount(item, 1)}
-                        disabled={updatingIds.has(item.id)}
-                        data-testid={`btn-plus-${item.id}`}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <StatusBadge status={getItemStatus(item)} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                      onClick={() => setHistoryItem(item)}
-                      title="Ver historial de conteo"
-                      data-testid={`btn-history-${item.id}`}
-                    >
-                      <History className="h-4 w-4" />
-                    </Button>
+            </TableHeader>
+            <TableBody>
+              {data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-32 text-center text-slate-500">
+                    No hay registros en esta vista.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                data.map((item) => (
+                  <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
+                    <TableCell className="font-medium font-mono text-xs whitespace-nowrap">{item.sku}</TableCell>
+                    <TableCell className="text-slate-700 font-medium min-w-[140px]">{item.descripcion}</TableCell>
+                    <TableCell className="text-slate-500 text-sm whitespace-nowrap hidden md:table-cell">{item.categoria}</TableCell>
+                    <TableCell className="text-right text-slate-600 font-mono text-sm whitespace-nowrap hidden sm:table-cell">
+                      {Number(item.precio ?? 0) > 0 ? `$${Number(item.precio).toFixed(2)}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-slate-500 font-mono whitespace-nowrap">{item.cantidadTeorica}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center space-x-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                          onClick={() => handleUpdateCount(item, -1)}
+                          disabled={item.cantidadFisica === 0 || updatingIds.has(item.id)}
+                          data-testid={`btn-minus-${item.id}`}
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </Button>
+                        <div className="w-12 text-center font-mono font-semibold text-base text-slate-900">
+                          {updatingIds.has(item.id) ? (
+                            <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
+                          ) : (
+                            item.cantidadFisica
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                          onClick={() => handleUpdateCount(item, 1)}
+                          disabled={updatingIds.has(item.id)}
+                          data-testid={`btn-plus-${item.id}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <StatusBadge status={getItemStatus(item)} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        onClick={() => setHistoryItem(item)}
+                        title="Ver historial de conteo"
+                        data-testid={`btn-history-${item.id}`}
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     ),
     [updatingIds, handleUpdateCount]
@@ -724,131 +733,172 @@ export default function Dashboard() {
       {/* Offline warning banner */}
       {status === "offline" && (
         <div className="bg-amber-500 text-amber-950 px-4 py-2 text-center text-sm font-semibold" data-testid="banner-offline">
-          Modo sin conexión — Los cambios se guardan localmente y se sincronizarán cuando vuelva la conexión.
+          Modo sin conexión — Los cambios se guardan localmente y se sincronizarán al reconectarse.
         </div>
       )}
 
       {/* Header */}
       <header className="bg-slate-900 text-white sticky top-0 z-10 shadow-md">
-        <div className="px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="p-2 hover:bg-slate-800 rounded-md transition-colors" data-testid="link-back">
+        <div className="px-3 sm:px-5 h-14 sm:h-16 flex items-center justify-between gap-2">
+          {/* Left */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Link href="/admin" className="p-1.5 hover:bg-slate-800 rounded-md transition-colors shrink-0" data-testid="link-back">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="h-6 w-px bg-slate-700 hidden sm:block" />
-            <div>
-              <h1 className="text-lg font-bold leading-none tracking-tight">Auditor Pro</h1>
-              <p className="text-xs text-slate-400 font-medium">
+            <div className="min-w-0 hidden sm:block">
+              <h1 className="text-sm font-bold leading-none tracking-tight">Auditor Pro</h1>
+              <p className="text-xs text-slate-400 font-medium truncate max-w-[160px] lg:max-w-xs">
                 {inventoryName}{inventoryLocation ? ` — ${inventoryLocation}` : ""}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Right actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <SWBadge />
             <OfflineIndicator status={status} pendingCount={pendingCount} onSync={forceSync} />
 
-            {/* Locations button */}
+            {/* Locations — icon on mobile */}
             <Button
               size="sm"
-              variant="outline"
-              className="font-semibold border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              variant="ghost"
+              className="text-slate-300 hover:bg-slate-800 hover:text-white h-8 w-8 sm:w-auto sm:px-3"
               onClick={() => setShowLocations(true)}
-              title="Gestionar locaciones"
+              title="Locaciones"
             >
-              <MapPin className="w-4 h-4 mr-2" />
-              <span className="hidden md:inline">Locaciones</span>
+              <MapPin className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline text-xs font-semibold">Locaciones</span>
             </Button>
 
-            {/* Participants button */}
+            {/* Participants — icon on mobile */}
             <Button
               size="sm"
-              variant="outline"
-              className="font-semibold border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              variant="ghost"
+              className="text-slate-300 hover:bg-slate-800 hover:text-white h-8 w-8 sm:w-auto sm:px-3"
               onClick={() => setShowParticipants(true)}
+              title="Participantes"
               data-testid="btn-participants"
             >
-              <Users className="w-4 h-4 mr-2" />
-              <span className="hidden md:inline">Participantes</span>
+              <Users className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline text-xs font-semibold">Participantes</span>
             </Button>
 
-            <span className="text-sm font-medium text-slate-300 hidden lg:inline-block">{today}</span>
-            <Link href={`/scanner/${inventoryId}`}>
+            {/* Scanner — hidden on smallest screens */}
+            <Link href={`/scanner/${inventoryId}`} className="hidden xs:block">
               <Button
                 size="sm"
-                variant="outline"
-                className="font-semibold border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+                variant="ghost"
+                className="text-slate-300 hover:bg-slate-800 hover:text-white h-8 w-8 sm:w-auto sm:px-3"
+                title="Modo escáner"
                 data-testid="btn-scanner-mode"
               >
-                <ScanBarcode className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Escáner</span>
+                <ScanBarcode className="w-4 h-4 sm:mr-1.5" />
+                <span className="hidden md:inline text-xs font-semibold">Escáner</span>
               </Button>
             </Link>
+
+            {/* Date — only large screens */}
+            <span className="text-xs font-medium text-slate-400 hidden xl:inline-block">{today}</span>
+
+            {/* Save */}
             <Button
               size="sm"
               variant="secondary"
               onClick={handleSave}
-              className="font-semibold"
+              className="font-semibold h-8 text-xs"
               data-testid="btn-save"
             >
-              <Save className="w-4 h-4 mr-2" />
-              {pendingCount > 0 ? `Guardar (${pendingCount})` : "Guardar"}
+              <Save className="w-3.5 h-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">
+                {pendingCount > 0 ? `Guardar (${pendingCount})` : "Guardar"}
+              </span>
+              {pendingCount > 0 && <span className="sm:hidden ml-0.5">{pendingCount}</span>}
             </Button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 max-w-[1400px] mx-auto w-full">
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card className="border-slate-200 shadow-sm" data-testid="card-summary-total">
-            <CardHeader className="pb-1 pt-4 px-4">
-              <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ítems</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-slate-900">{items.length}</div>
-              <div className="text-xs text-slate-400 mt-1 font-medium">{fmt(valorTotal)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-slate-200 shadow-sm border-b-4 border-b-emerald-400" data-testid="card-summary-cuadrados">
-            <CardHeader className="pb-1 pt-4 px-4">
-              <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cuadrados</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-slate-900">{totalCuadrados}</div>
-              <div className="text-xs text-emerald-600 mt-1 font-medium">{fmt(valorCuadrados)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-slate-200 shadow-sm border-b-4 border-b-amber-400" data-testid="card-summary-sobrantes">
-            <CardHeader className="pb-1 pt-4 px-4">
-              <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sobrantes</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-slate-900">{totalSobrantes}</div>
-              <div className="text-xs text-amber-600 mt-1 font-medium">+{fmt(valorSobrantes)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-slate-200 shadow-sm border-b-4 border-b-rose-400" data-testid="card-summary-faltantes">
-            <CardHeader className="pb-1 pt-4 px-4">
-              <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faltantes</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-slate-900">{totalFaltantes}</div>
-              <div className="text-xs text-rose-600 mt-1 font-medium">-{fmt(valorFaltantes)}</div>
-            </CardContent>
-          </Card>
+      <main className="flex-1 p-3 sm:p-5 max-w-[1400px] mx-auto w-full">
+
+        {/* ── Summary Cards row with toggle ──────────────────────────── */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="w-4 h-4 text-slate-400" />
+              <span className="text-sm font-semibold text-slate-600">Resumen</span>
+              {/* Quick stats badge when collapsed */}
+              {!cardsVisible && (
+                <span className="text-xs text-slate-400 ml-2">
+                  {totalCuadrados} cuadrados · {totalFaltantes} faltantes · {totalSobrantes} sobrantes
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setCardsVisible((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 transition-colors px-2 py-1 hover:bg-slate-200 rounded-md"
+              title={cardsVisible ? "Ocultar tarjetas" : "Mostrar tarjetas"}
+            >
+              {cardsVisible ? (
+                <><ChevronUp className="w-4 h-4" /> Ocultar</>
+              ) : (
+                <><ChevronDown className="w-4 h-4" /> Mostrar</>
+              )}
+            </button>
+          </div>
+
+          {cardsVisible && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card className="border-slate-200 shadow-sm" data-testid="card-summary-total">
+                <CardHeader className="pb-1 pt-3 px-3 sm:pt-4 sm:px-4">
+                  <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ítems</CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4">
+                  <div className="text-2xl sm:text-3xl font-bold text-slate-900">{items.length}</div>
+                  <div className="text-xs text-slate-400 mt-1 font-medium truncate">{fmt(valorTotal)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm border-b-4 border-b-emerald-400" data-testid="card-summary-cuadrados">
+                <CardHeader className="pb-1 pt-3 px-3 sm:pt-4 sm:px-4">
+                  <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cuadrados</CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4">
+                  <div className="text-2xl sm:text-3xl font-bold text-slate-900">{totalCuadrados}</div>
+                  <div className="text-xs text-emerald-600 mt-1 font-medium truncate">{fmt(valorCuadrados)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm border-b-4 border-b-amber-400" data-testid="card-summary-sobrantes">
+                <CardHeader className="pb-1 pt-3 px-3 sm:pt-4 sm:px-4">
+                  <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sobrantes</CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4">
+                  <div className="text-2xl sm:text-3xl font-bold text-slate-900">{totalSobrantes}</div>
+                  <div className="text-xs text-amber-600 mt-1 font-medium truncate">+{fmt(valorSobrantes)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm border-b-4 border-b-rose-400" data-testid="card-summary-faltantes">
+                <CardHeader className="pb-1 pt-3 px-3 sm:pt-4 sm:px-4">
+                  <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faltantes</CardTitle>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4">
+                  <div className="text-2xl sm:text-3xl font-bold text-slate-900">{totalFaltantes}</div>
+                  <div className="text-xs text-rose-600 mt-1 font-medium truncate">-{fmt(valorFaltantes)}</div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
 
-        {/* Tabs & Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <h2 className="text-xl font-bold text-slate-900">Listado de Artículos</h2>
-            <div className="relative w-full sm:w-72">
+        {/* ── Tabs & Table ─────────────────────────────────────────────── */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+            <h2 className="text-base sm:text-xl font-bold text-slate-900">Listado de Artículos</h2>
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
               <Input
                 type="search"
-                placeholder="Buscar por SKU o descripción..."
-                className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-slate-900"
+                placeholder="Buscar SKU o descripción..."
+                className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-slate-900 text-sm h-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 data-testid="input-search"
@@ -857,27 +907,29 @@ export default function Dashboard() {
           </div>
 
           <Tabs defaultValue="pendientes" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 mb-6 bg-slate-100 p-1">
-              <TabsTrigger value="pendientes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-pendientes">
-                Pendientes <Badge variant="secondary" className="ml-1 sm:ml-2 bg-slate-200 text-slate-700">{pendientes.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="cuadrados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-cuadrados">
-                Cuadrados <Badge variant="secondary" className="ml-1 sm:ml-2 bg-emerald-100 text-emerald-700">{cuadrados.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="sobrantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-sobrantes">
-                Sobrantes <Badge variant="secondary" className="ml-1 sm:ml-2 bg-amber-100 text-amber-700">{sobrantes.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="faltantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-faltantes">
-                Faltantes <Badge variant="secondary" className="ml-1 sm:ml-2 bg-rose-100 text-rose-700">{faltantes.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="volteados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs sm:text-sm" data-testid="tab-volteados">
-                <ArrowLeftRight className="w-3.5 h-3.5 mr-1 shrink-0" />
-                Volteados
-                {swappedPairs.length > 0 && (
-                  <Badge className="ml-1 sm:ml-2 bg-violet-100 text-violet-700 hover:bg-violet-100">{swappedPairs.length}</Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList className="grid grid-cols-5 mb-4 bg-slate-100 p-1 min-w-[480px]">
+                <TabsTrigger value="pendientes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs" data-testid="tab-pendientes">
+                  Pendientes <Badge variant="secondary" className="ml-1 bg-slate-200 text-slate-700 text-xs px-1.5">{pendientes.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="cuadrados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs" data-testid="tab-cuadrados">
+                  Cuadrados <Badge variant="secondary" className="ml-1 bg-emerald-100 text-emerald-700 text-xs px-1.5">{cuadrados.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="sobrantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs" data-testid="tab-sobrantes">
+                  Sobrantes <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700 text-xs px-1.5">{sobrantes.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="faltantes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs" data-testid="tab-faltantes">
+                  Faltantes <Badge variant="secondary" className="ml-1 bg-rose-100 text-rose-700 text-xs px-1.5">{faltantes.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="volteados" className="data-[state=active]:bg-white data-[state=active]:shadow-sm font-medium text-xs" data-testid="tab-volteados">
+                  <ArrowLeftRight className="w-3 h-3 mr-1 shrink-0" />
+                  Volteados
+                  {swappedPairs.length > 0 && (
+                    <Badge className="ml-1 bg-violet-100 text-violet-700 hover:bg-violet-100 text-xs px-1.5">{swappedPairs.length}</Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="pendientes" className="m-0 focus-visible:outline-none">
               {renderTable(pendientes)}
@@ -906,13 +958,13 @@ export default function Dashboard() {
 function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
   if (pairs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-4">
           <ArrowLeftRight className="w-6 h-6 text-emerald-500" />
         </div>
         <p className="text-slate-700 font-semibold">No se detectaron posibles códigos volteados</p>
         <p className="text-slate-400 text-sm mt-1 max-w-md">
-          Aparecen aquí cuando el sobrante de un artículo coincide con el faltante de otro, indicando posible confusión de códigos al escanear.
+          Aparecen aquí cuando el sobrante de un artículo coincide con el faltante de otro.
         </p>
       </div>
     );
@@ -920,7 +972,7 @@ function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
 
   return (
     <div>
-      <div className="flex items-start gap-3 mb-4 p-4 bg-violet-50 border border-violet-200 rounded-lg">
+      <div className="flex items-start gap-3 mb-4 p-3 sm:p-4 bg-violet-50 border border-violet-200 rounded-lg">
         <ArrowLeftRight className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-violet-900">
@@ -934,17 +986,16 @@ function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
 
       <div className="space-y-3">
         {pairs.map((pair, idx) => (
-          <div key={idx} className="border border-violet-200 bg-violet-50/30 rounded-lg p-4">
+          <div key={idx} className="border border-violet-200 bg-violet-50/30 rounded-lg p-3 sm:p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
                 Par #{idx + 1}
               </span>
-              {pair.diff === 0 && (
+              {pair.diff === 0 ? (
                 <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                   Coincidencia exacta
                 </span>
-              )}
-              {pair.diff > 0 && (
+              ) : (
                 <span className="text-xs text-slate-500">
                   Diferencia: {pair.diff} unidad{pair.diff !== 1 ? "es" : ""}
                 </span>
@@ -954,28 +1005,20 @@ function SwappedCodesView({ pairs }: { pairs: SwappedPair[] }) {
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Sobrante</span>
-                  <span className="font-mono text-xs text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
-                    +{pair.surplusQty}
-                  </span>
+                  <span className="font-mono text-xs text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">+{pair.surplusQty}</span>
                 </div>
                 <p className="font-mono text-xs text-slate-500 mb-0.5">{pair.surplus.sku}</p>
                 <p className="text-sm font-semibold text-slate-800 leading-tight">{pair.surplus.descripcion}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Contado: {pair.surplus.cantidadFisica} / Teórico: {pair.surplus.cantidadTeorica}
-                </p>
+                <p className="text-xs text-slate-500 mt-1">Contado: {pair.surplus.cantidadFisica} / Teórico: {pair.surplus.cantidadTeorica}</p>
               </div>
               <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-bold text-rose-700 uppercase tracking-wide">Faltante</span>
-                  <span className="font-mono text-xs text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">
-                    -{pair.deficitQty}
-                  </span>
+                  <span className="font-mono text-xs text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">-{pair.deficitQty}</span>
                 </div>
                 <p className="font-mono text-xs text-slate-500 mb-0.5">{pair.deficit.sku}</p>
                 <p className="text-sm font-semibold text-slate-800 leading-tight">{pair.deficit.descripcion}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Contado: {pair.deficit.cantidadFisica} / Teórico: {pair.deficit.cantidadTeorica}
-                </p>
+                <p className="text-xs text-slate-500 mt-1">Contado: {pair.deficit.cantidadFisica} / Teórico: {pair.deficit.cantidadTeorica}</p>
               </div>
             </div>
           </div>
