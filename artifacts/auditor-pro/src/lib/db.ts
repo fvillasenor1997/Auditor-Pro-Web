@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import type { InventoryItem, InventoryWithItems, Inventory } from "@workspace/api-client-react";
+import type { InventoryItem, InventoryWithItems } from "@workspace/api-client-react";
 
 export interface PendingUpdate {
   id?: number;
@@ -22,10 +22,23 @@ export interface CachedItem extends InventoryItem {
   _inventoryId: number;
 }
 
+export interface LocalCountRecord {
+  id?: number;
+  inventoryId: number;
+  itemId: number;
+  username: string;
+  location: string;
+  cantidad: number;
+  timestamp: number;
+  synced?: boolean;
+}
+
 class AuditorDB extends Dexie {
   inventories!: Table<CachedInventory, number>;
   items!: Table<CachedItem, number>;
   pendingUpdates!: Table<PendingUpdate, number>;
+  countRecords!: Table<LocalCountRecord, number>;
+  pendingCountRecords!: Table<LocalCountRecord, number>;
 
   constructor() {
     super("AuditorProDB");
@@ -34,10 +47,16 @@ class AuditorDB extends Dexie {
       items: "id, _inventoryId",
       pendingUpdates: "++id, inventoryId, itemId, timestamp",
     });
+    this.version(2).stores({
+      countRecords: "++id, itemId, inventoryId, username, timestamp",
+      pendingCountRecords: "++id, inventoryId, itemId, timestamp",
+    });
   }
 }
 
 export const auditorDB = new AuditorDB();
+
+// ─── Inventory cache ───────────────────────────────────────────────────────────
 
 export async function cacheInventory(inv: InventoryWithItems): Promise<void> {
   await auditorDB.inventories.put({
@@ -68,12 +87,13 @@ export async function updateLocalItem(
   await auditorDB.items.update(itemId, { cantidadFisica });
 }
 
+// ─── Pending PATCH updates ─────────────────────────────────────────────────────
+
 export async function queuePendingUpdate(
   inventoryId: number,
   itemId: number,
   cantidadFisica: number
 ): Promise<void> {
-  // Replace any existing pending update for this item (only latest value matters)
   const existing = await auditorDB.pendingUpdates
     .where("itemId")
     .equals(itemId)
@@ -108,4 +128,41 @@ export async function getPendingCount(inventoryId: number): Promise<number> {
     .where("inventoryId")
     .equals(inventoryId)
     .count();
+}
+
+// ─── Count records ─────────────────────────────────────────────────────────────
+
+export async function addLocalCountRecord(record: Omit<LocalCountRecord, "id">): Promise<number> {
+  return auditorDB.countRecords.add({ ...record, synced: false });
+}
+
+export async function markCountRecordSynced(id: number): Promise<void> {
+  await auditorDB.countRecords.update(id, { synced: true });
+}
+
+export async function getCountRecordsForItem(
+  inventoryId: number,
+  itemId: number
+): Promise<LocalCountRecord[]> {
+  return auditorDB.countRecords
+    .where("itemId")
+    .equals(itemId)
+    .and((r) => r.inventoryId === inventoryId)
+    .sortBy("timestamp");
+}
+
+// ─── Pending count records (offline queue) ─────────────────────────────────────
+
+export async function queuePendingCountRecord(
+  record: Omit<LocalCountRecord, "id">
+): Promise<number> {
+  return auditorDB.pendingCountRecords.add({ ...record });
+}
+
+export async function getPendingCountRecords(): Promise<LocalCountRecord[]> {
+  return auditorDB.pendingCountRecords.orderBy("timestamp").toArray();
+}
+
+export async function removePendingCountRecord(id: number): Promise<void> {
+  await auditorDB.pendingCountRecords.delete(id);
 }

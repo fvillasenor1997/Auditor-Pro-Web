@@ -1,6 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Save, Minus, Plus, Search, Loader2, AlertCircle, ScanBarcode } from "lucide-react";
+import {
+  ArrowLeft,
+  Save,
+  Minus,
+  Plus,
+  Search,
+  Loader2,
+  AlertCircle,
+  ScanBarcode,
+  Users,
+  History,
+  MapPin,
+  Clock,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +32,9 @@ import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useInventorySync } from "@/hooks/useInventorySync";
 import type { CachedItem } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
+import { authHeaders } from "@/lib/auth";
+
+const BASE = import.meta.env.BASE_URL;
 
 type ItemStatus = "Pendiente" | "Cuadrado" | "Sobrante" | "Faltante";
 
@@ -41,6 +58,249 @@ const StatusBadge = ({ status }: { status: ItemStatus }) => {
   }
 };
 
+interface CountRecord {
+  id: number;
+  username: string;
+  location: string;
+  cantidad: number;
+  timestamp: string;
+}
+
+interface Participant {
+  username: string;
+  lastActivity: string | null;
+  totalRecords: number;
+}
+
+function formatTime(iso: string | null): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    day: "2-digit",
+    month: "short",
+  }).format(new Date(iso));
+}
+
+// ─── History Modal ──────────────────────────────────────────────────────────────
+
+function HistoryModal({
+  item,
+  inventoryId,
+  onClose,
+}: {
+  item: CachedItem;
+  inventoryId: number;
+  onClose: () => void;
+}) {
+  const [records, setRecords] = useState<CountRecord[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useState(() => {
+    let active = true;
+    fetch(`${BASE}api/inventories/${inventoryId}/items/${item.id}/records`, {
+      headers: authHeaders(),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: CountRecord[]) => {
+        if (active) setRecords(data);
+      })
+      .catch(() => {
+        if (active) setError("No se pudieron cargar los registros.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-200">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <History className="w-5 h-5 text-slate-500" />
+              Detalle de Conteo
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              <span className="font-mono">{item.sku}</span> — {item.descripcion}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto px-6 py-4">
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            </div>
+          )}
+          {error && (
+            <div className="flex items-center justify-center py-12 text-rose-500 gap-2">
+              <AlertCircle className="w-5 h-5" />
+              {error}
+            </div>
+          )}
+          {records !== null && records.length === 0 && (
+            <p className="text-center text-slate-500 py-12 text-sm">
+              Aún no hay registros de conteo para este producto.
+            </p>
+          )}
+          {records !== null && records.length > 0 && (
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-semibold text-slate-900">Auditor</TableHead>
+                  <TableHead className="font-semibold text-slate-900">Locación</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-900">Cantidad</TableHead>
+                  <TableHead className="font-semibold text-slate-900">Hora</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium text-slate-800">@{r.username}</TableCell>
+                    <TableCell className="text-slate-600">
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        {r.location}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold text-slate-900">
+                      +{r.cantidad}
+                    </TableCell>
+                    <TableCell className="text-slate-500 text-sm whitespace-nowrap">
+                      {formatTime(r.timestamp)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+
+        {records !== null && records.length > 0 && (
+          <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between rounded-b-xl">
+            <span className="text-sm text-slate-500">{records.length} registro{records.length !== 1 ? "s" : ""}</span>
+            <span className="text-sm font-semibold text-slate-900">
+              Total contado:{" "}
+              <span className="font-mono">{records.reduce((s, r) => s + r.cantidad, 0)}</span>
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Participants Modal ─────────────────────────────────────────────────────────
+
+function ParticipantsModal({
+  inventoryId,
+  onClose,
+}: {
+  inventoryId: number;
+  onClose: () => void;
+}) {
+  const [participants, setParticipants] = useState<Participant[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useState(() => {
+    let active = true;
+    fetch(`${BASE}api/inventories/${inventoryId}/participants`, {
+      headers: authHeaders(),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: Participant[]) => {
+        if (active) setParticipants(data);
+      })
+      .catch(() => {
+        if (active) setError("No se pudieron cargar los participantes.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Users className="w-5 h-5 text-slate-500" />
+            Participantes
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 max-h-[60vh] overflow-auto">
+          {loading && (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            </div>
+          )}
+          {error && (
+            <div className="flex items-center justify-center py-10 text-rose-500 gap-2 text-sm">
+              <AlertCircle className="w-4 h-4" /> {error}
+            </div>
+          )}
+          {participants !== null && participants.length === 0 && (
+            <p className="text-center text-slate-500 py-10 text-sm">
+              Aún no hay conteos registrados en esta auditoría.
+            </p>
+          )}
+          {participants !== null && participants.length > 0 && (
+            <div className="space-y-3">
+              {participants.map((p) => (
+                <div
+                  key={p.username}
+                  className="flex items-center justify-between py-3 px-4 bg-slate-50 rounded-lg border border-slate-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-white text-sm font-bold">
+                      {p.username[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">@{p.username}</p>
+                      <p className="text-xs text-slate-500">{p.totalRecords} registro{p.totalRecords !== 1 ? "s" : ""}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400 flex items-center gap-1 justify-end">
+                      <Clock className="w-3 h-3" />
+                      Último conteo
+                    </p>
+                    <p className="text-xs font-medium text-slate-700">
+                      {formatTime(p.lastActivity)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard ──────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
   const params = useParams<{ id: string }>();
   const inventoryId = parseInt(params.id ?? "", 10);
@@ -51,6 +311,8 @@ export default function Dashboard() {
 
   const [search, setSearch] = useState("");
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
+  const [historyItem, setHistoryItem] = useState<CachedItem | null>(null);
+  const [showParticipants, setShowParticipants] = useState(false);
 
   const filteredItems = useMemo(() => {
     if (!search) return items;
@@ -89,13 +351,98 @@ export default function Dashboard() {
       await forceSync();
       toast({ title: "Sincronizado", description: "Todos los cambios han sido enviados al servidor." });
     } else if (pendingCount > 0) {
-      toast({ title: "Sin conexión", description: `${pendingCount} cambios guardados localmente. Se sincronizarán al recuperar la conexión.`, variant: "destructive" });
+      toast({ title: "Sin conexión", description: `${pendingCount} cambios guardados localmente.`, variant: "destructive" });
     } else {
       toast({ title: "Todo guardado", description: "No hay cambios pendientes." });
     }
   };
 
   const today = new Intl.DateTimeFormat("es-ES", { dateStyle: "long" }).format(new Date());
+
+  const renderTable = useCallback(
+    (data: CachedItem[]) => (
+      <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <Table>
+          <TableHeader className="bg-slate-50">
+            <TableRow className="hover:bg-slate-50">
+              <TableHead className="w-[120px] font-semibold text-slate-900">SKU</TableHead>
+              <TableHead className="font-semibold text-slate-900">Descripción</TableHead>
+              <TableHead className="w-[150px] font-semibold text-slate-900">Categoría</TableHead>
+              <TableHead className="w-[100px] text-right font-semibold text-slate-900">Teórico</TableHead>
+              <TableHead className="w-[180px] text-center font-semibold text-slate-900">Físico</TableHead>
+              <TableHead className="w-[120px] text-center font-semibold text-slate-900">Estado</TableHead>
+              <TableHead className="w-[60px] text-center font-semibold text-slate-900">Ver</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-32 text-center text-slate-500">
+                  No hay registros en esta vista.
+                </TableCell>
+              </TableRow>
+            ) : (
+              data.map((item) => (
+                <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
+                  <TableCell className="font-medium font-mono text-xs">{item.sku}</TableCell>
+                  <TableCell className="text-slate-700 font-medium">{item.descripcion}</TableCell>
+                  <TableCell className="text-slate-500">{item.categoria}</TableCell>
+                  <TableCell className="text-right text-slate-500 font-mono">{item.cantidadTeorica}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                        onClick={() => handleUpdateCount(item, -1)}
+                        disabled={item.cantidadFisica === 0 || updatingIds.has(item.id)}
+                        data-testid={`btn-minus-${item.id}`}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900">
+                        {updatingIds.has(item.id) ? (
+                          <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
+                        ) : (
+                          item.cantidadFisica
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                        onClick={() => handleUpdateCount(item, 1)}
+                        disabled={updatingIds.has(item.id)}
+                        data-testid={`btn-plus-${item.id}`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <StatusBadge status={getItemStatus(item)} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                      onClick={() => setHistoryItem(item)}
+                      title="Ver historial de conteo"
+                      data-testid={`btn-history-${item.id}`}
+                    >
+                      <History className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    ),
+    [updatingIds, handleUpdateCount]
+  );
 
   if (isNaN(inventoryId)) {
     return (
@@ -134,77 +481,23 @@ export default function Dashboard() {
   const inventoryName = inventory?.name ?? `Inventario #${inventoryId}`;
   const inventoryLocation = inventory?.location ?? "";
 
-  const renderTable = (data: CachedItem[]) => (
-    <div className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm">
-      <Table>
-        <TableHeader className="bg-slate-50">
-          <TableRow className="hover:bg-slate-50">
-            <TableHead className="w-[120px] font-semibold text-slate-900">SKU</TableHead>
-            <TableHead className="font-semibold text-slate-900">Descripción</TableHead>
-            <TableHead className="w-[150px] font-semibold text-slate-900">Categoría</TableHead>
-            <TableHead className="w-[100px] text-right font-semibold text-slate-900">Teórico</TableHead>
-            <TableHead className="w-[180px] text-center font-semibold text-slate-900">Físico</TableHead>
-            <TableHead className="w-[120px] text-center font-semibold text-slate-900">Estado</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={6} className="h-32 text-center text-slate-500">
-                No hay registros en esta vista.
-              </TableCell>
-            </TableRow>
-          ) : (
-            data.map((item) => (
-              <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
-                <TableCell className="font-medium font-mono text-xs">{item.sku}</TableCell>
-                <TableCell className="text-slate-700 font-medium">{item.descripcion}</TableCell>
-                <TableCell className="text-slate-500">{item.categoria}</TableCell>
-                <TableCell className="text-right text-slate-500 font-mono">{item.cantidadTeorica}</TableCell>
-                <TableCell>
-                  <div className="flex items-center justify-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                      onClick={() => handleUpdateCount(item, -1)}
-                      disabled={item.cantidadFisica === 0 || updatingIds.has(item.id)}
-                      data-testid={`btn-minus-${item.id}`}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <div className="w-16 text-center font-mono font-semibold text-lg text-slate-900">
-                      {updatingIds.has(item.id) ? (
-                        <Loader2 className="w-4 h-4 animate-spin mx-auto text-slate-400" />
-                      ) : (
-                        item.cantidadFisica
-                      )}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                      onClick={() => handleUpdateCount(item, 1)}
-                      disabled={updatingIds.has(item.id)}
-                      data-testid={`btn-plus-${item.id}`}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-                <TableCell className="text-center">
-                  <StatusBadge status={getItemStatus(item)} />
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
+      {/* Modals */}
+      {historyItem && (
+        <HistoryModal
+          item={historyItem}
+          inventoryId={inventoryId}
+          onClose={() => setHistoryItem(null)}
+        />
+      )}
+      {showParticipants && (
+        <ParticipantsModal
+          inventoryId={inventoryId}
+          onClose={() => setShowParticipants(false)}
+        />
+      )}
+
       {/* Offline warning banner */}
       {status === "offline" && (
         <div className="bg-amber-500 text-amber-950 px-4 py-2 text-center text-sm font-semibold" data-testid="banner-offline">
@@ -229,6 +522,19 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <OfflineIndicator status={status} pendingCount={pendingCount} onSync={forceSync} />
+
+            {/* Participants button */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="font-semibold border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              onClick={() => setShowParticipants(true)}
+              data-testid="btn-participants"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Participantes
+            </Button>
+
             <span className="text-sm font-medium text-slate-300 hidden md:inline-block">{today}</span>
             <Link href={`/scanner/${inventoryId}`}>
               <Button

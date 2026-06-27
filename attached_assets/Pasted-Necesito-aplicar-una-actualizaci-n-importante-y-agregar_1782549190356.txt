@@ -1,0 +1,28 @@
+Necesito aplicar una actualización importante y agregar características críticas a la aplicación de "Auditor Pro Web" que ya construiste. Por favor, realiza las siguientes modificaciones en el Backend, Base de Datos (SQLite / IndexedDB) y Frontend:
+
+**1. Actualización del Modelo de Datos (Historial de Registros de Conteo):**
+- Actualmente no se muestran los registros individuales (el desglose de cada escaneo). Necesitamos una nueva tabla/modelo llamada `CountRecord` (o ajustar el flujo) para guardar CADA conteo de forma individual.
+- Campos requeridos para cada registro de conteo: 
+  * `id` (Autoincremental / UUID)
+  * `item_id` (Relación con el producto/SKU)
+  * `user_id` o `username` (Quién lo contó)
+  * `locacion` (Dónde lo contó)
+  * `cantidad` (Cuántas unidades sumó en ese registro)
+  * `timestamp` (Fecha y hora exacta del conteo)
+- Asegúrate de reflejar este modelo tanto en el servidor (SQLite) como en la base de datos local del navegador (`IndexedDB` / Dexie.js) para que funcione 100% offline.
+
+**2. Flujo del Auditor: Bloqueo por Locación Obligatoria (Frontend Auditor):**
+- En la vista del Auditor (`/auditor/conteo`), antes de permitir que la cámara escanee o que se usen los botones de conteo rápido, el sistema DEBE obligar al auditor a ingresar o seleccionar una "Locación" (por ejemplo: un campo de texto o dropdown llamado 'Locación actual a contar').
+- **Regla de negocio:** Si el campo de locación está vacío, el escáner de cámara y la botonera deben estar deshabilitados (bloqueados) con un mensaje visual que diga: "Por favor, introduce la locación antes de empezar a contar".
+- Cuando el auditor realice un conteo, esa locación ingresada se debe asociar automáticamente a ese `CountRecord`.
+
+**3. Barra Superior: Control de Participantes/Auditores (Frontend General):**
+- En la barra superior (Navbar), justo a un lado del indicador de estado en línea ("En línea / Offline"), agrega un nuevo botón o icono de "Participantes".
+- Al hacer clic en este botón, debe abrirse un modal o un menú desplegable que muestre la lista de todos los auditores/contadores asignados a la auditoría actual y la hora de su "Última actualización de conteo" (es decir, el timestamp de su último registro enviado).
+
+**4. Panel de Consolidación: Botón de Historial por Producto (Frontend Admin):**
+- En la vista del Administrador (`/admin/dashboard`), dentro de las tablas de las pestañas ("Pendientes", "Cuadrados", "Sobrantes", "Faltantes"), agrega una nueva columna al final de cada fila con un botón de acción (puedes usar un icono de un reloj, ojo o lista de historial).
+- **Acción del botón:** Al hacer clic en este botón para un SKU específico, se debe abrir un modal de "Detalle de Conteo". Este modal mostrará una tabla con todos los registros individuales de ese producto con las columnas: **Auditor (Quién contó), Locación (Dónde lo contó), Cantidad (Cuánto contó) y Hora**.
+- Esto permitirá al administrador ver exactamente la muestra y el desglose de los registros que componen la "Suma de Conteo Físico" de ese ítem.
+
+Por favor, ajusta los componentes de React, los esquemas de base de datos y los endpoints del backend para integrar estas funciones de forma limpia y reactiva.

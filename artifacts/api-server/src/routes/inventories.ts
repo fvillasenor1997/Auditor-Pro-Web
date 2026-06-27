@@ -3,8 +3,8 @@ import fs from "fs";
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { eq, and } from "drizzle-orm";
-import { db, inventoriesTable, inventoryItemsTable } from "@workspace/db";
+import { eq, and, desc, max, sql } from "drizzle-orm";
+import { db, inventoriesTable, inventoryItemsTable, countRecordsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 
@@ -210,6 +210,120 @@ router.patch(
     }
 
     res.json(updated);
+  }
+);
+
+// POST /inventories/:inventoryId/items/:itemId/records — create count record
+router.post(
+  "/inventories/:inventoryId/items/:itemId/records",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const rawInvId = Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0] : req.params.inventoryId;
+    const rawItemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+    const inventoryId = parseInt(rawInvId ?? "", 10);
+    const itemId = parseInt(rawItemId ?? "", 10);
+    if (isNaN(inventoryId) || isNaN(itemId)) {
+      res.status(400).json({ error: "Invalid id parameters" });
+      return;
+    }
+
+    const { username, location, cantidad, timestamp } = req.body as {
+      username?: unknown;
+      location?: unknown;
+      cantidad?: unknown;
+      timestamp?: unknown;
+    };
+
+    if (!username || typeof username !== "string") {
+      res.status(400).json({ error: "username is required" });
+      return;
+    }
+    if (!location || typeof location !== "string") {
+      res.status(400).json({ error: "location is required" });
+      return;
+    }
+    if (cantidad === undefined || typeof cantidad !== "number" || cantidad <= 0) {
+      res.status(400).json({ error: "cantidad must be a positive number" });
+      return;
+    }
+
+    const ts = timestamp ? new Date(timestamp as string) : new Date();
+
+    const [record] = await db
+      .insert(countRecordsTable)
+      .values({ inventoryId, itemId, username, location, cantidad, timestamp: ts })
+      .returning();
+
+    res.status(201).json(record);
+  }
+);
+
+// GET /inventories/:inventoryId/items/:itemId/records — list count records for a SKU
+router.get(
+  "/inventories/:inventoryId/items/:itemId/records",
+  requireAuth,
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const rawInvId = Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0] : req.params.inventoryId;
+    const rawItemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+    const inventoryId = parseInt(rawInvId ?? "", 10);
+    const itemId = parseInt(rawItemId ?? "", 10);
+    if (isNaN(inventoryId) || isNaN(itemId)) {
+      res.status(400).json({ error: "Invalid id parameters" });
+      return;
+    }
+
+    const records = await db
+      .select()
+      .from(countRecordsTable)
+      .where(
+        and(
+          eq(countRecordsTable.inventoryId, inventoryId),
+          eq(countRecordsTable.itemId, itemId)
+        )
+      )
+      .orderBy(desc(countRecordsTable.timestamp));
+
+    res.json(
+      records.map((r) => ({
+        ...r,
+        timestamp: r.timestamp.toISOString(),
+      }))
+    );
+  }
+);
+
+// GET /inventories/:inventoryId/participants — auditors active on this inventory
+router.get(
+  "/inventories/:inventoryId/participants",
+  requireAuth,
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const rawInvId = Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0] : req.params.inventoryId;
+    const inventoryId = parseInt(rawInvId ?? "", 10);
+    if (isNaN(inventoryId)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+
+    const rows = await db
+      .select({
+        username: countRecordsTable.username,
+        lastActivity: max(countRecordsTable.timestamp),
+        totalRecords: sql<number>`count(*)::int`,
+      })
+      .from(countRecordsTable)
+      .where(eq(countRecordsTable.inventoryId, inventoryId))
+      .groupBy(countRecordsTable.username)
+      .orderBy(desc(max(countRecordsTable.timestamp)));
+
+    res.json(
+      rows.map((r) => ({
+        username: r.username,
+        lastActivity: r.lastActivity ? r.lastActivity.toISOString() : null,
+        totalRecords: r.totalRecords,
+      }))
+    );
   }
 );
 

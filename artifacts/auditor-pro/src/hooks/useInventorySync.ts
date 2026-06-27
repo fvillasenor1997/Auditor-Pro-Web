@@ -6,7 +6,7 @@ import {
   getPendingCount,
   type CachedItem,
 } from "@/lib/db";
-import { syncItemUpdate, fetchAndCacheInventory, flushPendingUpdates } from "@/lib/sync";
+import { syncItemUpdate, fetchAndCacheInventory, flushPendingUpdates, flushPendingCountRecords } from "@/lib/sync";
 
 export type SyncStatus = "loading" | "online" | "offline" | "syncing" | "error";
 
@@ -86,6 +86,7 @@ export function useInventorySync(inventoryId: number): UseInventorySyncResult {
     setStatus("syncing");
 
     try {
+      await flushPendingCountRecords();
       await flushPendingUpdates(async (remaining) => {
         setPendingCount(remaining);
       });
