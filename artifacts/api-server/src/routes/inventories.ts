@@ -295,6 +295,97 @@ router.get(
   }
 );
 
+// PATCH /inventories/:inventoryId/items/:itemId/records/:recordId — edit count record
+router.patch(
+  "/inventories/:inventoryId/items/:itemId/records/:recordId",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const inventoryId = parseInt(
+      Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0]! : req.params.inventoryId ?? "", 10
+    );
+    const itemId = parseInt(
+      Array.isArray(req.params.itemId) ? req.params.itemId[0]! : req.params.itemId ?? "", 10
+    );
+    const recordId = parseInt(
+      Array.isArray(req.params.recordId) ? req.params.recordId[0]! : req.params.recordId ?? "", 10
+    );
+    if (isNaN(inventoryId) || isNaN(itemId) || isNaN(recordId)) {
+      res.status(400).json({ error: "Invalid id parameters" }); return;
+    }
+
+    const { cantidad } = req.body as { cantidad?: unknown };
+    if (cantidad === undefined || typeof cantidad !== "number" || cantidad < 1 || !Number.isInteger(cantidad)) {
+      res.status(400).json({ error: "cantidad must be a positive integer" }); return;
+    }
+
+    // Check record exists and belongs to this user (unless admin)
+    const [existing] = await db.select().from(countRecordsTable)
+      .where(and(eq(countRecordsTable.id, recordId), eq(countRecordsTable.inventoryId, inventoryId), eq(countRecordsTable.itemId, itemId)));
+
+    if (!existing) { res.status(404).json({ error: "Record not found" }); return; }
+    if (req.user?.role !== "admin" && existing.username !== req.user?.username) {
+      res.status(403).json({ error: "Cannot edit another auditor's record" }); return;
+    }
+
+    const [updated] = await db.update(countRecordsTable)
+      .set({ cantidad })
+      .where(eq(countRecordsTable.id, recordId))
+      .returning();
+
+    // Recalculate cantidadFisica for this item
+    const [agg] = await db.select({ total: sql<number>`coalesce(sum(cantidad), 0)::int` })
+      .from(countRecordsTable)
+      .where(and(eq(countRecordsTable.inventoryId, inventoryId), eq(countRecordsTable.itemId, itemId)));
+
+    await db.update(inventoryItemsTable)
+      .set({ cantidadFisica: agg?.total ?? 0 })
+      .where(and(eq(inventoryItemsTable.id, itemId), eq(inventoryItemsTable.inventoryId, inventoryId)));
+
+    res.json({ ...updated!, timestamp: updated!.timestamp.toISOString() });
+  }
+);
+
+// DELETE /inventories/:inventoryId/items/:itemId/records/:recordId — delete count record
+router.delete(
+  "/inventories/:inventoryId/items/:itemId/records/:recordId",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const inventoryId = parseInt(
+      Array.isArray(req.params.inventoryId) ? req.params.inventoryId[0]! : req.params.inventoryId ?? "", 10
+    );
+    const itemId = parseInt(
+      Array.isArray(req.params.itemId) ? req.params.itemId[0]! : req.params.itemId ?? "", 10
+    );
+    const recordId = parseInt(
+      Array.isArray(req.params.recordId) ? req.params.recordId[0]! : req.params.recordId ?? "", 10
+    );
+    if (isNaN(inventoryId) || isNaN(itemId) || isNaN(recordId)) {
+      res.status(400).json({ error: "Invalid id parameters" }); return;
+    }
+
+    const [existing] = await db.select().from(countRecordsTable)
+      .where(and(eq(countRecordsTable.id, recordId), eq(countRecordsTable.inventoryId, inventoryId), eq(countRecordsTable.itemId, itemId)));
+
+    if (!existing) { res.status(404).json({ error: "Record not found" }); return; }
+    if (req.user?.role !== "admin" && existing.username !== req.user?.username) {
+      res.status(403).json({ error: "Cannot delete another auditor's record" }); return;
+    }
+
+    await db.delete(countRecordsTable).where(eq(countRecordsTable.id, recordId));
+
+    // Recalculate cantidadFisica for this item
+    const [agg] = await db.select({ total: sql<number>`coalesce(sum(cantidad), 0)::int` })
+      .from(countRecordsTable)
+      .where(and(eq(countRecordsTable.inventoryId, inventoryId), eq(countRecordsTable.itemId, itemId)));
+
+    await db.update(inventoryItemsTable)
+      .set({ cantidadFisica: agg?.total ?? 0 })
+      .where(and(eq(inventoryItemsTable.id, itemId), eq(inventoryItemsTable.inventoryId, inventoryId)));
+
+    res.json({ ok: true });
+  }
+);
+
 // ─── Locations ───────────────────────────────────────────────────────────────
 
 // GET /inventories/:inventoryId/locations — list locations (all authenticated users)

@@ -82,15 +82,20 @@ export async function fetchAndCacheInventory(inventoryId: number) {
 
 // ─── Count records ─────────────────────────────────────────────────────────────
 
+export interface SyncCountResult {
+  status: "synced" | "queued";
+  serverId?: number;
+  localId: number;
+}
+
 export async function syncCountRecord(
   record: Omit<LocalCountRecord, "id" | "synced">
-): Promise<"synced" | "queued"> {
-  // Always store locally first
+): Promise<SyncCountResult> {
   const localId = await addLocalCountRecord(record);
 
   if (!navigator.onLine) {
     await queuePendingCountRecord(record);
-    return "queued";
+    return { status: "queued", localId };
   }
 
   try {
@@ -108,11 +113,49 @@ export async function syncCountRecord(
       }
     );
     if (!res.ok) throw new Error("API error");
+    const data = await res.json() as { id: number };
     await markCountRecordSynced(localId);
-    return "synced";
+    return { status: "synced", serverId: data.id, localId };
   } catch {
     await queuePendingCountRecord(record);
-    return "queued";
+    return { status: "queued", localId };
+  }
+}
+
+export async function deleteCountRecord(
+  inventoryId: number,
+  itemId: number,
+  serverId: number
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${BASE}api/inventories/${inventoryId}/items/${itemId}/records/${serverId}`,
+      { method: "DELETE", headers: authHeaders() }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function editCountRecord(
+  inventoryId: number,
+  itemId: number,
+  serverId: number,
+  cantidad: number
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${BASE}api/inventories/${inventoryId}/items/${itemId}/records/${serverId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ cantidad }),
+      }
+    );
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
